@@ -1,0 +1,2052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep AI Detection Analysis</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --card: #16161f;
+    --border: #2a2a3a;
+    --accent: #00ff9d;
+    --accent2: #ff3c6e;
+    --accent3: #7b61ff;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+    --warn: #ffaa00;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* animated grid bg */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,157,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,157,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  header {
+    margin-bottom: 48px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 32px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 3px 10px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(28px, 5vw, 52px);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #fff 0%, var(--accent) 60%, var(--accent3) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+    letter-spacing: 0.05em;
+    line-height: 1.8;
+  }
+
+  .input-zone {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0;
+    margin-bottom: 24px;
+    transition: border-color 0.2s;
+    position: relative;
+  }
+
+  .input-zone:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(0,255,157,0.15), 0 0 40px rgba(0,255,157,0.05);
+  }
+
+  .input-label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    padding: 14px 20px 0;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  #wordCount {
+    color: var(--accent);
+    font-size: 10px;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 220px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    padding: 14px 20px 20px;
+    resize: vertical;
+  }
+
+  textarea::placeholder { color: var(--muted); }
+
+  .btn {
+    width: 100%;
+    padding: 18px;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn:hover { background: #00ffb3; transform: translateY(-1px); box-shadow: 0 8px 30px rgba(0,255,157,0.25); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-inner { position: relative; z-index: 1; }
+
+  /* RESULTS */
+  #results { display: none; animation: fadeUp 0.5s ease forwards; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .verdict-banner {
+    border-radius: 4px;
+    padding: 28px 32px;
+    margin-bottom: 32px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    border: 1px solid;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .verdict-banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.06;
+  }
+
+  .verdict-banner.ai {
+    border-color: var(--accent2);
+    background: rgba(255,60,110,0.08);
+  }
+  .verdict-banner.ai::before { background: var(--accent2); }
+
+  .verdict-banner.human {
+    border-color: var(--accent);
+    background: rgba(0,255,157,0.06);
+  }
+  .verdict-banner.human::before { background: var(--accent); }
+
+  .verdict-banner.mixed {
+    border-color: var(--warn);
+    background: rgba(255,170,0,0.06);
+  }
+  .verdict-banner.mixed::before { background: var(--warn); }
+
+  .verdict-icon { font-size: 48px; flex-shrink: 0; }
+
+  .verdict-text h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .verdict-text p { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.6; }
+
+  .score-ring-wrap {
+    margin-left: auto;
+    flex-shrink: 0;
+    text-align: center;
+  }
+
+  .score-ring {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    border: 3px solid;
+    flex-direction: column;
+  }
+
+  .score-ring .ring-label { font-size: 8px; font-family: 'Space Mono', monospace; letter-spacing: 0.1em; margin-top: 2px; }
+
+  .score-ring.ai { border-color: var(--accent2); color: var(--accent2); }
+  .score-ring.human { border-color: var(--accent); color: var(--accent); }
+  .score-ring.mixed { border-color: var(--warn); color: var(--warn); }
+
+  /* Metric grid */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  @media (max-width: 600px) { .metrics-grid { grid-template-columns: 1fr; } }
+
+  .metric-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .metric-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+  }
+
+  .metric-card.warn::after { background: var(--accent2); }
+  .metric-card.caution::after { background: var(--warn); }
+  .metric-card.ok::after { background: var(--accent); }
+
+  .metric-name {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .metric-name .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .metric-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .metric-bar-wrap {
+    background: var(--border);
+    height: 3px;
+    border-radius: 2px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+
+  .metric-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .metric-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+  /* Signal flags */
+  .signals-section {
+    margin-bottom: 32px;
+  }
+
+  .section-title {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .signals-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .signal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .signal-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .signal-text strong { display: block; color: var(--text); font-size: 12px; margin-bottom: 2px; }
+  .signal-text span { color: var(--muted); font-size: 11px; }
+
+  /* Analysis log */
+  .log-section { margin-bottom: 32px; }
+
+  .log-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 2;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .log-line { display: flex; gap: 12px; }
+  .log-time { color: var(--accent3); flex-shrink: 0; }
+  .log-msg { }
+  .log-msg.highlight { color: var(--accent); }
+  .log-msg.warn { color: var(--accent2); }
+
+  /* Loading */
+  .loading { display: none; text-align: center; padding: 48px; }
+  .loading.active { display: block; }
+
+  .spinner {
+    width: 40px; height: 40px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 16px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading p { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; }
+  .loading .loading-step { color: var(--accent); margin-top: 8px; font-size: 11px; min-height: 20px; }
+
+  .disclaimer {
+    background: rgba(123,97,255,0.08);
+    border: 1px solid rgba(123,97,255,0.2);
+    border-radius: 4px;
+    padding: 16px 20px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 24px;
+  }
+
+  .disclaimer strong { color: var(--accent3); }
+
+  /* Forensic layer */
+  .forensic-banner {
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+    border: 1px solid rgba(123,97,255,0.4);
+    background: rgba(123,97,255,0.07);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .forensic-banner::before {
+    content: '// LAYER 2: FORENSIC CHARACTER ANALYSIS';
+    position: absolute;
+    top: 10px; right: 16px;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--accent3);
+    opacity: 0.6;
+  }
+
+  .forensic-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--accent3);
+    margin-bottom: 14px;
+    letter-spacing: 0.05em;
+  }
+
+  .forensic-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  @media (max-width: 600px) { .forensic-grid { grid-template-columns: 1fr 1fr; } }
+
+  .forensic-stat {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px 14px;
+  }
+
+  .forensic-stat-label {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .forensic-stat-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  .forensic-stat-value.clean { color: var(--accent); }
+  .forensic-stat-value.suspicious { color: var(--accent2); }
+  .forensic-stat-value.caution { color: var(--warn); }
+
+  .forensic-stat-sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+  .char-map-wrap {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 14px;
+    margin-top: 12px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .char-map-title {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--accent3);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .char-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 11px;
+  }
+
+  .char-entry:last-child { border-bottom: none; }
+
+  .char-glyph {
+    font-family: 'Space Mono', monospace;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-size: 11px;
+    min-width: 40px;
+    text-align: center;
+    color: var(--accent3);
+  }
+
+  .char-codepoint {
+    color: var(--muted);
+    font-size: 10px;
+    min-width: 80px;
+  }
+
+  .char-name { color: var(--text); flex: 1; }
+  .char-count { color: var(--warn); font-size: 10px; }
+  .char-risk { font-size: 9px; padding: 2px 6px; border-radius: 2px; border: 1px solid; }
+  .char-risk.high { color: var(--accent2); border-color: var(--accent2); }
+  .char-risk.med { color: var(--warn); border-color: var(--warn); }
+  .char-risk.low { color: var(--muted); border-color: var(--muted); }
+
+  .clean-msg {
+    font-size: 12px;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .forensic-verdict {
+    margin-top: 14px;
+    padding: 12px 16px;
+    border-radius: 3px;
+    font-size: 12px;
+    line-height: 1.6;
+    border: 1px solid;
+  }
+
+  .forensic-verdict.clean { border-color: rgba(0,255,157,0.3); background: rgba(0,255,157,0.05); color: var(--accent); }
+  .forensic-verdict.suspicious { border-color: rgba(255,60,110,0.3); background: rgba(255,60,110,0.05); color: #ff8fab; }
+  .forensic-verdict.caution { border-color: rgba(255,170,0,0.3); background: rgba(255,170,0,0.05); color: var(--warn); }
+
+  /* Dual score display */
+  .dual-scores {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .score-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .score-panel-label {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .score-panel-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .score-panel-sub { font-size: 10px; color: var(--muted); margin-top: 6px; }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 4px;
+    padding: 32px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 12px;
+    position: relative;
+    background: var(--card);
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(0,255,157,0.04);
+    box-shadow: 0 0 30px rgba(0,255,157,0.06);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon { font-size: 28px; margin-bottom: 10px; }
+  .drop-label { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .drop-sub { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; }
+  .drop-accepted { font-size: 10px; color: var(--accent); margin-top: 8px; letter-spacing: 0.1em; }
+  .file-loaded-banner { background: rgba(0,255,157,0.06); border: 1px solid rgba(0,255,157,0.25); border-radius: 4px; padding: 12px 18px; margin-bottom: 12px; display: none; align-items: center; gap: 12px; font-size: 12px; }
+  .file-loaded-banner.visible { display: flex; }
+  .file-loaded-icon { font-size: 20px; }
+  .file-loaded-name { color: var(--accent); font-weight: 700; flex: 1; }
+  .file-loaded-meta { color: var(--muted); font-size: 10px; }
+  .file-clear-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-size: 10px; padding: 3px 8px; border-radius: 2px; cursor: pointer; font-family: 'Space Mono', monospace; }
+  .file-clear-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .or-divider { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; }
+  .or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* Metadata panel */
+  .meta-panel { background: var(--card); border: 1px solid rgba(123,97,255,0.35); border-radius: 4px; padding: 20px 24px; margin-bottom: 32px; position: relative; overflow: hidden; }
+  .meta-panel::before { content: '// FILE METADATA SCAN'; position: absolute; top: 12px; right: 16px; font-size: 9px; letter-spacing: 0.15em; color: var(--accent3); opacity: 0.5; }
+  .meta-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800; color: var(--accent3); margin-bottom: 16px; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  @media (max-width: 600px) { .meta-grid { grid-template-columns: 1fr; } }
+  .meta-row { background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 3px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+  .meta-key { font-size: 9px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+  .meta-val { font-size: 12px; color: var(--text); word-break: break-all; }
+  .meta-val.flagged { color: var(--accent2); }
+  .meta-val.ok { color: var(--accent); }
+  .meta-val.warn { color: var(--warn); }
+  .meta-flags { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .meta-flag { font-size: 11px; padding: 8px 12px; border-radius: 3px; border: 1px solid; line-height: 1.5; }
+  .meta-flag.red { border-color: rgba(255,60,110,0.3); background: rgba(255,60,110,0.06); color: #ff8fab; }
+  .meta-flag.yellow { border-color: rgba(255,170,0,0.3); background: rgba(255,170,0,0.06); color: var(--warn); }
+  .meta-flag.green { border-color: rgba(0,255,157,0.3); background: rgba(0,255,157,0.06); color: var(--accent); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="badge">// Advanced Linguistic Analysis</div>
+    <h1>AI ORIGIN<br>DETECTOR</h1>
+    <p class="subtitle">
+      Multi-vector forensic analysis · Perplexity · Burstiness · Entropy · Syntax patterns<br>
+      Powered by 12 independent detection algorithms
+    </p>
+  </header>
+
+  <div class="disclaimer">
+    <strong>How this works:</strong> Drop a file or paste text. Runs 16 linguistic vectors + forensic character scan + file metadata analysis entirely in your browser. Nothing is uploaded anywhere. Supports .txt, .docx, .pdf (text-based).
+  </div>
+
+  <!-- Drop zone -->
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".txt,.docx,.pdf,.doc,.rtf,.md" onchange="handleFileSelect(event)">
+    <div class="drop-icon">📄</div>
+    <div class="drop-label">Drop a file here or click to browse</div>
+    <div class="drop-sub">File contents stay on your device — nothing is sent anywhere</div>
+    <div class="drop-accepted">TXT · DOCX · PDF · MD · RTF</div>
+  </div>
+
+  <div class="file-loaded-banner" id="fileLoadedBanner">
+    <span class="file-loaded-icon">✅</span>
+    <span class="file-loaded-name" id="fileLoadedName"></span>
+    <span class="file-loaded-meta" id="fileLoadedMeta"></span>
+    <button class="file-clear-btn" onclick="clearFile()">✕ clear</button>
+  </div>
+
+  <div class="or-divider">OR PASTE TEXT DIRECTLY</div>
+
+  <div class="input-zone">
+    <div class="input-label">
+      <span>// PASTE DOCUMENT BELOW</span>
+      <span id="wordCount">0 words</span>
+    </div>
+    <textarea id="docInput" placeholder="Paste your document here. Minimum 100 words recommended for accurate analysis..."></textarea>
+  </div>
+
+  <button class="btn" id="analyzeBtn" onclick="runAnalysis()">
+    <span class="btn-inner">⟶ Run Deep Analysis</span>
+  </button>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>RUNNING FORENSIC ANALYSIS</p>
+    <div class="loading-step" id="loadingStep">Initializing...</div>
+  </div>
+
+  <div id="results">
+    <div class="verdict-banner" id="verdictBanner">
+      <div class="verdict-icon" id="verdictIcon"></div>
+      <div class="verdict-text">
+        <h2 id="verdictTitle"></h2>
+        <p id="verdictSub"></p>
+      </div>
+      <div class="score-ring-wrap">
+        <div class="score-ring" id="scoreRing">
+          <span id="scoreNum"></span>
+          <span class="ring-label">AI SCORE</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta-panel" id="metaPanel" style="display:none"></div>
+
+    <div class="dual-scores" id="dualScores"></div>
+
+    <div class="forensic-banner" id="forensicBanner"></div>
+
+    <div class="metrics-grid" id="metricsGrid"></div>
+
+    <div class="signals-section">
+      <div class="section-title">Detected Signals</div>
+      <div class="signals-list" id="signalsList"></div>
+    </div>
+
+    <div class="log-section">
+      <div class="section-title">Analysis Log</div>
+      <div class="log-box" id="logBox"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// FILE HANDLING & METADATA EXTRACTION
+// ============================================================
+
+let fileMetadata = null; // populated when a file is loaded
+let fileText = '';       // extracted text from file
+
+const dropZone = document.getElementById('dropZone');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+
+function clearFile() {
+  document.getElementById('fileInput').value = '';
+  document.getElementById('fileLoadedBanner').classList.remove('visible');
+  document.getElementById('docInput').value = '';
+  document.getElementById('docInput').placeholder = 'Paste your document here. Minimum 100 words recommended for accurate analysis...';
+  document.getElementById('wordCount').textContent = '0 words';
+  fileMetadata = null;
+  fileText = '';
+}
+
+async function processFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const sizekb = (file.size / 1024).toFixed(1);
+
+  // Base metadata from the File object itself
+  const baseMeta = {
+    fileName: file.name,
+    fileType: file.type || ext.toUpperCase(),
+    fileSizeKB: sizekb,
+    lastModified: file.lastModified ? new Date(file.lastModified).toISOString() : 'Unknown',
+    extension: ext
+  };
+
+  try {
+    if (ext === 'txt' || ext === 'md' || ext === 'rtf') {
+      const text = await file.text();
+      fileText = text;
+      document.getElementById('docInput').value = text;
+      updateWordCount(text);
+      fileMetadata = { ...baseMeta, source: 'plaintext', docProps: null };
+
+    } else if (ext === 'docx') {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await parseDocx(arrayBuffer, baseMeta);
+      fileText = result.text;
+      document.getElementById('docInput').value = result.text;
+      updateWordCount(result.text);
+      fileMetadata = { ...baseMeta, source: 'docx', ...result.meta };
+
+    } else if (ext === 'pdf') {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await parsePdf(arrayBuffer, baseMeta);
+      // PDF extraction can return a fallback message if text layer is absent
+      const extracted = result.text && !result.text.startsWith('[PDF text extraction limited') ? result.text : '';
+      fileText = extracted;
+      document.getElementById('docInput').value = extracted;
+      updateWordCount(extracted);
+      if (!extracted) {
+        document.getElementById('docInput').placeholder = 'PDF text extraction was limited for this file — please paste the text manually above.';
+      }
+      fileMetadata = { ...baseMeta, source: 'pdf', ...result.meta };
+
+    } else {
+      const text = await file.text();
+      fileText = text;
+      document.getElementById('docInput').value = text;
+      updateWordCount(text);
+      fileMetadata = { ...baseMeta, source: 'unknown', docProps: null };
+    }
+
+    // Show loaded banner
+    const banner = document.getElementById('fileLoadedBanner');
+    banner.classList.add('visible');
+    document.getElementById('fileLoadedName').textContent = file.name;
+    document.getElementById('fileLoadedMeta').textContent = `${sizekb} KB · ${ext.toUpperCase()} · extracted`;
+
+  } catch (err) {
+    alert(`Could not read file: ${err.message}. Try copying and pasting the text instead.`);
+  }
+}
+
+function updateWordCount(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  document.getElementById('wordCount').textContent = `${words} words`;
+}
+
+// ---- DOCX parser using raw ZIP/XML ----
+async function parseDocx(arrayBuffer, baseMeta) {
+  // DOCX is a ZIP. Use JSZip-free approach: manually find XML chunks
+  // We'll use a minimal ZIP parser to extract word/document.xml and docProps
+  const uint8 = new Uint8Array(arrayBuffer);
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+
+  function findXml(filename) {
+    // Search for the filename in the ZIP's local file headers
+    const enc = new TextEncoder();
+    const target = enc.encode(filename);
+    for (let i = 0; i < uint8.length - target.length - 30; i++) {
+      if (uint8[i] === 0x50 && uint8[i+1] === 0x4B && uint8[i+2] === 0x03 && uint8[i+3] === 0x04) {
+        const nameLen = uint8[i+26] | (uint8[i+27] << 8);
+        const extraLen = uint8[i+28] | (uint8[i+29] << 8);
+        const nameBytes = uint8.slice(i+30, i+30+nameLen);
+        const name = decoder.decode(nameBytes);
+        if (name === filename) {
+          const compressedSize = uint8[i+18] | (uint8[i+19]<<8) | (uint8[i+20]<<16) | (uint8[i+21]<<24);
+          const compressionMethod = uint8[i+8] | (uint8[i+9] << 8);
+          const dataStart = i + 30 + nameLen + extraLen;
+          const compressedData = uint8.slice(dataStart, dataStart + compressedSize);
+          if (compressionMethod === 0) {
+            return decoder.decode(compressedData);
+          } else if (compressionMethod === 8) {
+            try {
+              const ds = new DecompressionStream('deflate-raw');
+              // Return a promise for async decompression
+              return { compressed: compressedData, stream: true };
+            } catch(e) { return null; }
+          }
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+
+  async function decompressEntry(filename) {
+    const enc = new TextEncoder();
+    const decoder2 = new TextDecoder('utf-8', { fatal: false });
+    const target = enc.encode(filename);
+    for (let i = 0; i < uint8.length - target.length - 30; i++) {
+      if (uint8[i] === 0x50 && uint8[i+1] === 0x4B && uint8[i+2] === 0x03 && uint8[i+3] === 0x04) {
+        const nameLen = uint8[i+26] | (uint8[i+27] << 8);
+        const extraLen = uint8[i+28] | (uint8[i+29] << 8);
+        const nameBytes = uint8.slice(i+30, i+30+nameLen);
+        const name = decoder2.decode(nameBytes);
+        if (name === filename) {
+          const compressedSize = uint8[i+18] | (uint8[i+19]<<8) | (uint8[i+20]<<16) | (uint8[i+21]<<24);
+          const compressionMethod = uint8[i+8] | (uint8[i+9] << 8);
+          const dataStart = i + 30 + nameLen + extraLen;
+          const compressedData = uint8.slice(dataStart, dataStart + compressedSize);
+          if (compressionMethod === 0) return decoder2.decode(compressedData);
+          if (compressionMethod === 8) {
+            const ds = new DecompressionStream('deflate-raw');
+            const writer = ds.writable.getWriter();
+            writer.write(compressedData);
+            writer.close();
+            const chunks = [];
+            const reader = ds.readable.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+            }
+            const total = chunks.reduce((a,c)=>a+c.length,0);
+            const out = new Uint8Array(total);
+            let off = 0;
+            chunks.forEach(c => { out.set(c, off); off += c.length; });
+            return decoder2.decode(out);
+          }
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Extract main document text
+  const docXml = await decompressEntry('word/document.xml');
+  let text = '';
+  if (docXml) {
+    // Strip XML tags, preserve paragraph breaks
+    text = docXml
+      .replace(/<w:p[ >][^]*?<\/w:p>/g, m => m.replace(/<[^>]+>/g, '') + '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#x[0-9A-Fa-f]+;/g,'')
+      .replace(/\n{3,}/g,'\n\n').trim();
+  }
+
+  // Extract core properties (author, created, modified, revision)
+  const coreXml = await decompressEntry('docProps/core.xml');
+  const appXml = await decompressEntry('docProps/app.xml');
+
+  const getTag = (xml, tag) => {
+    if (!xml) return null;
+    const m = xml.match(new RegExp(`<[^:>]*:?${tag}[^>]*>([^<]*)<`));
+    return m ? m[1].trim() : null;
+  };
+
+  const docProps = coreXml ? {
+    creator: getTag(coreXml, 'creator'),
+    lastModifiedBy: getTag(coreXml, 'lastModifiedBy'),
+    created: getTag(coreXml, 'created'),
+    modified: getTag(coreXml, 'modified'),
+    revision: getTag(coreXml, 'revision'),
+    description: getTag(coreXml, 'description'),
+    keywords: getTag(coreXml, 'keywords'),
+    title: getTag(coreXml, 'title'),
+    // App props
+    application: appXml ? getTag(appXml, 'Application') : null,
+    appVersion: appXml ? getTag(appXml, 'AppVersion') : null,
+    pages: appXml ? getTag(appXml, 'Pages') : null,
+    words: appXml ? getTag(appXml, 'Words') : null,
+    characters: appXml ? getTag(appXml, 'Characters') : null,
+    totalEditingTime: appXml ? getTag(appXml, 'TotalTime') : null,
+  } : null;
+
+  // Count revision markup in document XML
+  let revisionCount = 0;
+  let insertions = 0, deletions = 0;
+  if (docXml) {
+    revisionCount = (docXml.match(/<w:rsid/g) || []).length;
+    insertions = (docXml.match(/<w:ins /g) || []).length;
+    deletions = (docXml.match(/<w:del /g) || []).length;
+  }
+
+  return { text, meta: { docProps, revisionCount, insertions, deletions } };
+}
+
+// ---- PDF text extractor using PDF.js ----
+async function parsePdf(arrayBuffer, baseMeta) {
+  // Dynamically load PDF.js from CDN
+  if (!window.pdfjsLib) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+  const pdf = await loadingTask.promise;
+  const numPages = pdf.numPages;
+
+  // Extract metadata
+  let docProps = { pageCount: numPages };
+  try {
+    const meta = await pdf.getMetadata();
+    const info = meta.info || {};
+    docProps = {
+      title: info.Title || null,
+      author: info.Author || null,
+      creator: info.Creator || null,
+      producer: info.Producer || null,
+      creationDate: info.CreationDate || null,
+      modDate: info.ModDate || null,
+      keywords: info.Keywords || null,
+      subject: info.Subject || null,
+      pageCount: numPages,
+    };
+  } catch(e) {}
+
+  // Extract text from all pages
+  let fullText = '';
+  for (let i = 1; i <= numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str).join(' ');
+    fullText += pageText + '\n\n';
+  }
+
+  fullText = fullText.replace(/\s{3,}/g, '\n\n').trim();
+
+  return {
+    text: fullText || '',
+    meta: { docProps, pageCount: numPages, revisionCount: 0, insertions: 0, deletions: 0 }
+  };
+}
+
+// ---- Metadata analysis & scoring ----
+function analyzeMetadata(meta) {
+  const flags = [];
+  let metaAiScore = 0;
+
+  if (!meta) return { flags, metaAiScore, rows: [] };
+
+  const rows = [];
+  const dp = meta.docProps;
+
+  // --- File-level ---
+  rows.push({ key: 'File Name', val: meta.fileName });
+  rows.push({ key: 'File Size', val: meta.fileSizeKB + ' KB' });
+  rows.push({ key: 'Last Modified (OS)', val: meta.lastModified !== 'Unknown' ? new Date(meta.lastModified).toLocaleString() : 'Unknown', cls: '' });
+
+  if (dp) {
+    // Author / Creator
+    const author = dp.creator || dp.author;
+    if (author) {
+      const aiAuthorPatterns = /^(user|admin|owner|openai|chatgpt|claude|anthropic|gemini|gpt|ai|default user|windows user)$/i;
+      const cls = aiAuthorPatterns.test(author.trim()) ? 'flagged' : 'ok';
+      rows.push({ key: 'Author', val: author, cls });
+      if (cls === 'flagged') { flags.push({ level: 'red', msg: `⚠ Author field is "${author}" — a known AI/default placeholder name.` }); metaAiScore += 30; }
+    } else {
+      rows.push({ key: 'Author', val: 'Not set', cls: 'warn' });
+      flags.push({ level: 'yellow', msg: '⚡ No author metadata — field missing or stripped, which can happen when AI-generated text is saved without user info.' });
+      metaAiScore += 10;
+    }
+
+    // Last modified by
+    if (dp.lastModifiedBy && dp.lastModifiedBy !== dp.creator) {
+      rows.push({ key: 'Last Modified By', val: dp.lastModifiedBy, cls: 'ok' });
+      flags.push({ level: 'green', msg: '✓ Document was modified by a different user than creator — indicates real human editing history.' });
+      metaAiScore -= 10;
+    } else if (dp.lastModifiedBy) {
+      rows.push({ key: 'Last Modified By', val: dp.lastModifiedBy });
+    }
+
+    // Created vs Modified dates
+    if (dp.created) rows.push({ key: 'Created', val: dp.created.replace('T',' ').replace('Z',' UTC') });
+    if (dp.modified) {
+      rows.push({ key: 'Last Modified', val: dp.modified.replace('T',' ').replace('Z',' UTC') });
+      if (dp.created && dp.modified) {
+        const created = new Date(dp.created);
+        const modified = new Date(dp.modified);
+        const diffMs = modified - created;
+        const diffMin = Math.round(diffMs / 60000);
+        if (diffMin < 2 && diffMin >= 0) {
+          flags.push({ level: 'red', msg: `⚠ Document created and last modified within ${diffMin < 1 ? 'under a minute' : diffMin + ' minute(s)'} — consistent with AI generation and immediate save, no human editing time.` });
+          metaAiScore += 35;
+          rows.push({ key: 'Edit Duration', val: `${diffMin} min`, cls: 'flagged' });
+        } else if (diffMin < 10 && diffMin >= 0) {
+          flags.push({ level: 'yellow', msg: `⚡ Very short edit window (${diffMin} min) between creation and last save — limited evidence of human revision.` });
+          metaAiScore += 15;
+          rows.push({ key: 'Edit Duration', val: `${diffMin} min`, cls: 'warn' });
+        } else if (diffMin > 0) {
+          rows.push({ key: 'Edit Duration', val: diffMin > 60 ? `${Math.round(diffMin/60)}h ${diffMin%60}m` : `${diffMin} min`, cls: 'ok' });
+          flags.push({ level: 'green', msg: `✓ Document has ${diffMin > 60 ? Math.round(diffMin/60) + ' hours' : diffMin + ' minutes'} of edit history — consistent with human writing.` });
+          metaAiScore -= 15;
+        }
+      }
+    }
+
+    // Total editing time (Word/DOCX)
+    if (dp.totalEditingTime !== null && dp.totalEditingTime !== undefined) {
+      const editMin = parseInt(dp.totalEditingTime);
+      rows.push({ key: 'Total Editing Time', val: `${editMin} min`, cls: editMin < 2 ? 'flagged' : editMin < 5 ? 'warn' : 'ok' });
+      if (editMin < 2) {
+        flags.push({ level: 'red', msg: `⚠ Word reports only ${editMin} minute(s) of total editing time — strongly suggests text was pasted in rather than typed.` });
+        metaAiScore += 40;
+      } else if (editMin < 5) {
+        flags.push({ level: 'yellow', msg: `⚡ Only ${editMin} minutes of editing time recorded — minimal human revision detected.` });
+        metaAiScore += 15;
+      } else {
+        flags.push({ level: 'green', msg: `✓ ${editMin} minutes of editing time — consistent with human authorship.` });
+        metaAiScore -= 10;
+      }
+    }
+
+    // Revision count
+    if (meta.revisionCount !== undefined) {
+      rows.push({ key: 'Revision Markers (rsid)', val: meta.revisionCount, cls: meta.revisionCount < 5 ? 'warn' : 'ok' });
+      if (meta.revisionCount < 3) {
+        flags.push({ level: 'yellow', msg: `⚡ Only ${meta.revisionCount} revision session markers — document may have been created in a single paste session.` });
+        metaAiScore += 20;
+      } else {
+        flags.push({ level: 'green', msg: `✓ ${meta.revisionCount} revision session markers — document has been edited across multiple sessions.` });
+        metaAiScore -= 10;
+      }
+    }
+
+    // Track changes / insertions / deletions
+    if (meta.insertions > 0 || meta.deletions > 0) {
+      rows.push({ key: 'Tracked Changes', val: `${meta.insertions} insertions, ${meta.deletions} deletions`, cls: 'ok' });
+      flags.push({ level: 'green', msg: `✓ Tracked changes present (${meta.insertions} insertions, ${meta.deletions} deletions) — strong evidence of human editing process.` });
+      metaAiScore -= 20;
+    }
+
+    // Application
+    if (dp.application) {
+      rows.push({ key: 'Application', val: `${dp.application} ${dp.appVersion || ''}`.trim() });
+      const suspiciousApps = /api|script|python|node|curl|postman|automated|bot/i;
+      if (suspiciousApps.test(dp.application)) {
+        flags.push({ level: 'red', msg: `⚠ Document created by "${dp.application}" — not a standard word processor.` });
+        metaAiScore += 25;
+      }
+    }
+
+    // PDF-specific
+    if (dp.producer) {
+      rows.push({ key: 'PDF Producer', val: dp.producer });
+      const aiProducers = /openai|chatgpt|claude|anthropic|fpdf|reportlab|python|pdfkit|wkhtmltopdf/i;
+      if (aiProducers.test(dp.producer)) {
+        flags.push({ level: 'red', msg: `⚠ PDF produced by "${dp.producer}" — associated with programmatic/AI document generation.` });
+        metaAiScore += 30;
+      }
+    }
+    if (dp.creator && meta.source === 'pdf') {
+      rows.push({ key: 'PDF Creator', val: dp.creator });
+    }
+
+    // Word count discrepancy
+    if (dp.words) {
+      rows.push({ key: 'Reported Word Count', val: dp.words + ' words' });
+    }
+
+    if (dp.title) rows.push({ key: 'Document Title', val: dp.title });
+    if (dp.keywords) rows.push({ key: 'Keywords', val: dp.keywords });
+    if (dp.revision) rows.push({ key: 'Save Count', val: dp.revision, cls: parseInt(dp.revision) < 2 ? 'warn' : 'ok' });
+  }
+
+  metaAiScore = Math.max(0, Math.min(100, metaAiScore));
+  return { flags, metaAiScore, rows };
+}
+
+function renderMetaPanel(meta, analysis) {
+  const panel = document.getElementById('metaPanel');
+  if (!meta) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+
+  const { rows, flags, metaAiScore } = analysis;
+  const cls = metaAiScore >= 40 ? 'suspicious' : metaAiScore >= 15 ? 'caution' : 'clean';
+  const clrMap = { suspicious: 'var(--accent2)', caution: 'var(--warn)', clean: 'var(--accent)' };
+
+  panel.innerHTML = `
+    <div class="meta-title">📁 File Metadata Analysis
+      <span style="float:right;font-size:20px;font-weight:800;color:${clrMap[cls]}">${metaAiScore}%</span>
+    </div>
+    <div class="meta-grid">
+      ${rows.map(r => `
+        <div class="meta-row">
+          <span class="meta-key">${r.key}</span>
+          <span class="meta-val ${r.cls||''}">${r.val ?? '—'}</span>
+        </div>`).join('')}
+    </div>
+    ${flags.length > 0 ? `<div class="meta-flags">${flags.map(f=>`<div class="meta-flag ${f.level}">${f.msg}</div>`).join('')}</div>` : ''}
+  `;
+}
+
+
+
+// Textarea word count listener
+const textarea = document.getElementById('docInput');
+textarea.addEventListener('input', () => {
+  const words = textarea.value.trim().split(/\s+/).filter(Boolean).length;
+  document.getElementById('wordCount').textContent = `${words} words`;
+});
+
+const AI_PHRASES = [
+  'in conclusion', 'it is worth noting', 'it is important to note', 'furthermore',
+  'moreover', 'in summary', 'to summarize', 'delve into', 'it is crucial',
+  'in the realm of', 'as we explore', 'it becomes evident', 'navigating',
+  'multifaceted', 'nuanced', 'at its core', 'it is essential', 'foster',
+  'leveraging', 'paradigm', 'tapestry', 'underscore', 'pivotal', 'utilize',
+  'in today\'s world', 'in the context of', 'underpins', 'embodies', 'holistic',
+  'robust', 'streamline', 'synergy', 'it goes without saying', 'needless to say',
+  'when it comes to', 'let us', 'one can argue', 'it should be noted',
+  'in light of', 'it is clear that', 'first and foremost', 'last but not least'
+];
+
+const HEDGE_WORDS = ['perhaps', 'possibly', 'might', 'may', 'could', 'seem', 'appears',
+  'generally', 'typically', 'often', 'usually', 'tend to', 'suggest', 'indicate'];
+
+function tokenize(text) {
+  return text.toLowerCase().match(/\b[a-z']+\b/g) || [];
+}
+
+function getSentences(text) {
+  return text.match(/[^.!?]+[.!?]+/g) || [text];
+}
+
+function getParagraphs(text) {
+  return text.split(/\n\s*\n/).filter(p => p.trim().length > 20);
+}
+
+// 1. Perplexity proxy — avg word length deviation (high regularity = AI)
+function calcPerplexity(text) {
+  const words = tokenize(text);
+  if (!words.length) return 0;
+  const lengths = words.map(w => w.length);
+  const avg = lengths.reduce((a,b)=>a+b,0)/lengths.length;
+  const variance = lengths.reduce((a,b)=>a+Math.pow(b-avg,2),0)/lengths.length;
+  // Low variance = uniform word lengths = more AI-like
+  const score = Math.max(0, Math.min(100, 100 - (variance * 12)));
+  return score;
+}
+
+// 2. Burstiness — variance in sentence lengths (humans burst, AI is flat)
+function calcBurstiness(text) {
+  const sentences = getSentences(text);
+  if (sentences.length < 3) return 50;
+  const lengths = sentences.map(s => s.trim().split(/\s+/).length);
+  const avg = lengths.reduce((a,b)=>a+b,0)/lengths.length;
+  const variance = lengths.reduce((a,b)=>a+Math.pow(b-avg,2),0)/lengths.length;
+  const std = Math.sqrt(variance);
+  const cv = std / avg; // coefficient of variation
+  // Low CV = AI (flat). High CV = human (bursty)
+  // Typical AI: cv 0.2–0.4. Human: cv 0.5–1.2
+  const aiScore = Math.max(0, Math.min(100, 100 - (cv * 90)));
+  return aiScore;
+}
+
+// 3. Lexical diversity (TTR) — AI tends to repeat key phrases
+function calcLexicalDiversity(text) {
+  const words = tokenize(text);
+  if (words.length < 10) return 50;
+  const unique = new Set(words).size;
+  const ttr = unique / words.length;
+  // Low TTR = repetitive = more AI
+  // Human natural prose: 0.45–0.7, AI often 0.35–0.55
+  const aiScore = Math.max(0, Math.min(100, 100 - (ttr * 130)));
+  return Math.max(0, aiScore);
+}
+
+// 4. AI phrase fingerprinting
+function calcAIPhrases(text) {
+  const lower = text.toLowerCase();
+  let hits = 0;
+  const found = [];
+  AI_PHRASES.forEach(phrase => {
+    if (lower.includes(phrase)) {
+      hits++;
+      found.push(phrase);
+    }
+  });
+  const words = tokenize(text).length;
+  const density = hits / (words / 100);
+  const score = Math.min(100, density * 25);
+  return { score, found };
+}
+
+// 5. Hedging language density
+function calcHedging(text) {
+  const lower = text.toLowerCase();
+  const words = tokenize(text);
+  let count = 0;
+  HEDGE_WORDS.forEach(h => {
+    const re = new RegExp('\\b' + h.replace(' ', '\\s+') + '\\b', 'gi');
+    const m = lower.match(re);
+    if (m) count += m.length;
+  });
+  const rate = count / (words.length / 100);
+  // AI tends to over-hedge
+  return Math.min(100, rate * 18);
+}
+
+// 6. Passive voice detection
+function calcPassiveVoice(text) {
+  const sentences = getSentences(text);
+  const passiveRe = /\b(is|are|was|were|be|been|being)\s+\w+ed\b/gi;
+  let passiveCount = 0;
+  sentences.forEach(s => {
+    if (passiveRe.test(s)) passiveCount++;
+    passiveRe.lastIndex = 0;
+  });
+  const ratio = passiveCount / sentences.length;
+  return Math.min(100, ratio * 160);
+}
+
+// 7. Transition word uniformity (AI uses them too evenly)
+function calcTransitions(text) {
+  const transitions = ['however', 'therefore', 'thus', 'consequently', 'nevertheless',
+    'additionally', 'furthermore', 'moreover', 'in contrast', 'on the other hand',
+    'as a result', 'for example', 'for instance', 'in addition', 'similarly'];
+  const lower = text.toLowerCase();
+  let count = 0;
+  transitions.forEach(t => {
+    const re = new RegExp('\\b' + t + '\\b', 'gi');
+    const m = lower.match(re);
+    if (m) count += m.length;
+  });
+  const words = tokenize(text).length;
+  const rate = count / (words / 100);
+  return Math.min(100, rate * 22);
+}
+
+// 8. Average clause depth proxy (subordinate clauses per sentence)
+function calcClauseDepth(text) {
+  const sentences = getSentences(text);
+  const subordRe = /\b(which|that|although|because|since|while|when|where|if|unless|whereas|whether)\b/gi;
+  let totalClauses = 0;
+  sentences.forEach(s => {
+    const m = s.match(subordRe);
+    totalClauses += m ? m.length : 0;
+  });
+  const avg = totalClauses / sentences.length;
+  // AI tends to have moderate, uniform clause depth
+  // Very low or very high = human. ~1.2-2.0 avg = AI
+  const aiScore = avg > 0.8 && avg < 2.5 ? Math.min(100, (2.5 - Math.abs(avg - 1.6)) * 50) : 30;
+  return Math.max(0, aiScore);
+}
+
+// 9. Punctuation variance
+function calcPunctuationVariance(text) {
+  const paragraphs = getParagraphs(text);
+  if (paragraphs.length < 2) return 50;
+  const counts = paragraphs.map(p => (p.match(/[,;:—\-()]/g) || []).length / p.split(/\s+/).length);
+  const avg = counts.reduce((a,b)=>a+b,0)/counts.length;
+  const variance = counts.reduce((a,b)=>a+Math.pow(b-avg,2),0)/counts.length;
+  // Low variance in punctuation density = AI
+  return Math.max(0, Math.min(100, 80 - (variance * 400)));
+}
+
+// 10. Paragraph length uniformity
+function calcParagraphUniformity(text) {
+  const paras = getParagraphs(text);
+  if (paras.length < 2) return 50;
+  const lengths = paras.map(p => p.trim().split(/\s+/).length);
+  const avg = lengths.reduce((a,b)=>a+b,0)/lengths.length;
+  const variance = lengths.reduce((a,b)=>a+Math.pow(b-avg,2),0)/lengths.length;
+  const cv = Math.sqrt(variance)/avg;
+  return Math.max(0, Math.min(100, 90 - (cv * 80)));
+}
+
+// 11. Rare word usage (AI tends to avoid very uncommon words)
+function calcRareWords(text) {
+  const commonWords = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with',
+    'by','from','up','about','into','through','during','is','are','was','were','be','been','have',
+    'has','had','do','does','did','will','would','could','should','may','might','can','this','that',
+    'these','those','it','its','i','you','he','she','we','they','my','your','his','her','our','their',
+    'what','which','who','when','where','how','if','then','than','so','as','not','no','there','here',
+    'more','also','just','only','very','much','many','most','some','all','any','each','other','over']);
+  const words = tokenize(text);
+  const contentWords = words.filter(w => !commonWords.has(w) && w.length > 3);
+  if (!contentWords.length) return 50;
+  // Check vocabulary variety in content words — low variety of rare/long words = AI
+  const uniqueContent = new Set(contentWords).size;
+  const rareTTR = uniqueContent / contentWords.length;
+  return Math.max(0, Math.min(100, 85 - (rareTTR * 90)));
+}
+
+// 12. Formality uniformity (AI stays in one register)
+function calcFormalityShift(text) {
+  const sentences = getSentences(text);
+  if (sentences.length < 4) return 50;
+  const informalMarkers = /\b(i'm|it's|don't|can't|won't|isn't|you're|we're|they're|gonna|wanna|kinda|sorta|yeah|ok|okay|alright|stuff|things|get|got|pretty|really|actually|basically|literally|honestly|like)\b/gi;
+  const formalMarkers = /\b(therefore|subsequently|notwithstanding|whilst|regarding|pertaining|aforementioned|henceforth|hereby|therein|pursuant|whereby)\b/gi;
+  const infScores = sentences.map(s => (s.match(informalMarkers) || []).length);
+  const frmScores = sentences.map(s => (s.match(formalMarkers) || []).length);
+  const totalInformal = infScores.reduce((a,b)=>a+b,0);
+  const totalFormal = frmScores.reduce((a,b)=>a+b,0);
+  // Check variance in informality across sentences
+  const avg = infScores.reduce((a,b)=>a+b,0)/infScores.length;
+  const variance = infScores.reduce((a,b)=>a+Math.pow(b-avg,2),0)/infScores.length;
+  // High variance = human (shifts register). Low variance = AI.
+  // Also: heavy formal with zero informal = AI signal
+  let score = Math.max(0, Math.min(100, 75 - (Math.sqrt(variance) * 30)));
+  if (totalInformal === 0 && sentences.length > 5) score = Math.min(score + 20, 100);
+  return score;
+}
+
+// 13. N-gram repetition — AI repeats 3-word sequences even in casual writing
+function calcNgramRepetition(text) {
+  const words = tokenize(text);
+  if (words.length < 30) return 50;
+  const trigrams = {};
+  for (let i = 0; i < words.length - 2; i++) {
+    const key = words[i] + ' ' + words[i+1] + ' ' + words[i+2];
+    trigrams[key] = (trigrams[key] || 0) + 1;
+  }
+  const total = Object.keys(trigrams).length;
+  const repeated = Object.values(trigrams).filter(v => v > 1).length;
+  const repetitionRate = repeated / total;
+  // High repetition rate = AI. Humans rarely repeat exact 3-word sequences.
+  return Math.min(100, repetitionRate * 300);
+}
+
+// 14. Sentence-opener diversity — AI starts sentences with similar structures
+function calcSentenceOpenerDiversity(text) {
+  const sentences = getSentences(text);
+  if (sentences.length < 5) return 50;
+  // Extract first 2 words of each sentence
+  const openers = sentences.map(s => {
+    const words = s.trim().toLowerCase().match(/\b[a-z']+\b/g) || [];
+    return words.slice(0, 2).join(' ');
+  }).filter(o => o.length > 0);
+  const unique = new Set(openers).size;
+  const diversity = unique / openers.length;
+  // Low diversity = AI (starts sentences the same way repeatedly)
+  return Math.max(0, Math.min(100, 90 - (diversity * 95)));
+}
+
+// 15. Punctuation fingerprinting — em-dash, parenthetical, mid-sentence interruption
+function calcPunctuationFingerprint(text) {
+  const sentences = getSentences(text);
+  const total = sentences.length;
+  if (total < 4) return 50;
+
+  // AI heavily overuses em-dashes as a stylistic crutch
+  const emDashCount = (text.match(/—/g) || []).length;
+  const emDashPerSentence = emDashCount / total;
+
+  // AI tends to use parentheticals at a very consistent rate
+  const parenSentences = sentences.filter(s => /\(.*?\)/.test(s)).length;
+  const parenRate = parenSentences / total;
+
+  // Check for "X — Y" construction (AI's favourite mid-sentence dash pattern)
+  const aiDashPattern = (text.match(/\w\s*—\s*\w/g) || []).length;
+  const aiDashRate = aiDashPattern / total;
+
+  // Score: heavy consistent em-dash use is AI signal
+  let score = 0;
+  if (emDashPerSentence > 0.4) score += 35;
+  else if (emDashPerSentence > 0.2) score += 15;
+  if (aiDashRate > 0.3) score += 25;
+  if (parenRate > 0.25 && parenRate < 0.5) score += 20; // too consistent = AI
+
+  // Exclamation marks: humans use them, AI rarely does in formal text
+  const exclamations = (text.match(/!/g) || []).length;
+  if (exclamations === 0 && total > 8) score += 10;
+
+  return Math.min(100, score);
+}
+
+// 16. Vocabulary clustering — AI distributes domain terms evenly; humans cluster them
+function calcVocabClustering(text) {
+  const paragraphs = getParagraphs(text);
+  if (paragraphs.length < 2) return 50;
+
+  // Find words that appear 2+ times total (domain/key terms)
+  const allWords = tokenize(text);
+  const freq = {};
+  allWords.forEach(w => { if (w.length > 4) freq[w] = (freq[w] || 0) + 1; });
+  const keyTerms = new Set(Object.keys(freq).filter(w => freq[w] >= 2));
+
+  if (keyTerms.size === 0) return 30;
+
+  // Count key term density per paragraph
+  const densities = paragraphs.map(p => {
+    const pWords = tokenize(p);
+    const hits = pWords.filter(w => keyTerms.has(w)).length;
+    return hits / pWords.length;
+  });
+
+  const avg = densities.reduce((a,b)=>a+b,0)/densities.length;
+  const variance = densities.reduce((a,b)=>a+Math.pow(b-avg,2),0)/densities.length;
+  const cv = avg > 0 ? Math.sqrt(variance)/avg : 0;
+
+  // Low CV = evenly distributed = AI. High CV = clustered = human.
+  return Math.max(0, Math.min(100, 85 - (cv * 75)));
+}
+
+// ============================================================
+// LAYER 2: FORENSIC CHARACTER / HIDDEN OBJECT ANALYSIS
+// ============================================================
+
+// Zero-width & invisible characters
+const INVISIBLE_CHARS = [
+  { cp: 0x200B, name: 'Zero-Width Space', risk: 'high', note: 'Common in ChatGPT/LLM copy-paste' },
+  { cp: 0x200C, name: 'Zero-Width Non-Joiner', risk: 'high', note: 'Rarely typed by humans' },
+  { cp: 0x200D, name: 'Zero-Width Joiner', risk: 'high', note: 'Emoji combiner — suspicious in plain text' },
+  { cp: 0x200E, name: 'Left-to-Right Mark', risk: 'high', note: 'Invisible formatting mark' },
+  { cp: 0x200F, name: 'Right-to-Left Mark', risk: 'high', note: 'Invisible formatting mark' },
+  { cp: 0xFEFF, name: 'BOM / Zero-Width No-Break Space', risk: 'high', note: 'Byte order mark — AI copy artifact' },
+  { cp: 0x00AD, name: 'Soft Hyphen', risk: 'med', note: 'Invisible hyphenation hint' },
+  { cp: 0x2060, name: 'Word Joiner', risk: 'high', note: 'Invisible — used in LLM watermarking' },
+  { cp: 0x2061, name: 'Function Application', risk: 'med', note: 'Math invisible operator' },
+  { cp: 0x2062, name: 'Invisible Times', risk: 'med', note: 'Math invisible operator' },
+  { cp: 0x2063, name: 'Invisible Separator', risk: 'med', note: 'Math invisible operator' },
+  { cp: 0x2064, name: 'Invisible Plus', risk: 'med', note: 'Math invisible operator' },
+  { cp: 0x034F, name: 'Combining Grapheme Joiner', risk: 'high', note: 'Used in steganographic watermarks' },
+  { cp: 0x115F, name: 'Hangul Choseong Filler', risk: 'high', note: 'Invisible Unicode filler' },
+  { cp: 0x1160, name: 'Hangul Jungseong Filler', risk: 'high', note: 'Invisible Unicode filler' },
+  { cp: 0x180E, name: 'Mongolian Vowel Separator', risk: 'high', note: 'Often invisible, used in encoding tricks' },
+  { cp: 0x3164, name: 'Hangul Filler', risk: 'high', note: 'Looks like space but is not' },
+  { cp: 0xFFA0, name: 'Halfwidth Hangul Filler', risk: 'high', note: 'Invisible space-like character' },
+  { cp: 0x2028, name: 'Line Separator', risk: 'med', note: 'Non-standard line break' },
+  { cp: 0x2029, name: 'Paragraph Separator', risk: 'med', note: 'Non-standard paragraph break' },
+  { cp: 0x00A0, name: 'Non-Breaking Space', risk: 'low', note: 'Common in auto-formatted text / AI output' },
+  { cp: 0x202F, name: 'Narrow No-Break Space', risk: 'med', note: 'Uncommon — may indicate formatted generation' },
+  { cp: 0xFFFD, name: 'Replacement Character', risk: 'med', note: 'Encoding error artifact' },
+];
+
+// Cyrillic/Greek/other homoglyphs that look like Latin chars
+const HOMOGLYPHS = [
+  // Cyrillic
+  { foreign: 'а', latin: 'a', script: 'Cyrillic' }, { foreign: 'е', latin: 'e', script: 'Cyrillic' },
+  { foreign: 'о', latin: 'o', script: 'Cyrillic' }, { foreign: 'р', latin: 'p', script: 'Cyrillic' },
+  { foreign: 'с', latin: 'c', script: 'Cyrillic' }, { foreign: 'х', latin: 'x', script: 'Cyrillic' },
+  { foreign: 'у', latin: 'y', script: 'Cyrillic' }, { foreign: 'В', latin: 'B', script: 'Cyrillic' },
+  { foreign: 'Е', latin: 'E', script: 'Cyrillic' }, { foreign: 'З', latin: '3', script: 'Cyrillic' },
+  { foreign: 'К', latin: 'K', script: 'Cyrillic' }, { foreign: 'М', latin: 'M', script: 'Cyrillic' },
+  { foreign: 'Н', latin: 'H', script: 'Cyrillic' }, { foreign: 'О', latin: 'O', script: 'Cyrillic' },
+  { foreign: 'Р', latin: 'P', script: 'Cyrillic' }, { foreign: 'С', latin: 'C', script: 'Cyrillic' },
+  { foreign: 'Т', latin: 'T', script: 'Cyrillic' }, { foreign: 'Х', latin: 'X', script: 'Cyrillic' },
+  // Greek
+  { foreign: 'ο', latin: 'o', script: 'Greek' }, { foreign: 'ν', latin: 'v', script: 'Greek' },
+  { foreign: 'Α', latin: 'A', script: 'Greek' }, { foreign: 'Β', latin: 'B', script: 'Greek' },
+  { foreign: 'Ε', latin: 'E', script: 'Greek' }, { foreign: 'Ζ', latin: 'Z', script: 'Greek' },
+  { foreign: 'Η', latin: 'H', script: 'Greek' }, { foreign: 'Ι', latin: 'I', script: 'Greek' },
+  { foreign: 'Κ', latin: 'K', script: 'Greek' }, { foreign: 'Μ', latin: 'M', script: 'Greek' },
+  { foreign: 'Ν', latin: 'N', script: 'Greek' }, { foreign: 'Ο', latin: 'O', script: 'Greek' },
+  { foreign: 'Ρ', latin: 'P', script: 'Greek' }, { foreign: 'Τ', latin: 'T', script: 'Greek' },
+  { foreign: 'Υ', latin: 'Y', script: 'Greek' }, { foreign: 'Χ', latin: 'X', script: 'Greek' },
+];
+
+function scanInvisibleChars(text) {
+  const found = [];
+  INVISIBLE_CHARS.forEach(def => {
+    const ch = String.fromCodePoint(def.cp);
+    let count = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === ch) count++;
+    }
+    if (count > 0) {
+      found.push({ ...def, count, display: `U+${def.cp.toString(16).toUpperCase().padStart(4,'0')}` });
+    }
+  });
+  return found;
+}
+
+function scanHomoglyphs(text) {
+  const found = [];
+  HOMOGLYPHS.forEach(def => {
+    let count = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === def.foreign) count++;
+    }
+    if (count > 0) {
+      found.push({ ...def, count, cp: def.foreign.codePointAt(0) });
+    }
+  });
+  return found;
+}
+
+function scanQuoteMixing(text) {
+  const smartSingle = (text.match(/['']/g) || []).length;
+  const smartDouble = (text.match(/[""]/g) || []).length;
+  const straightSingle = (text.match(/'/g) || []).length;
+  const straightDouble = (text.match(/"/g) || []).length;
+  const hasSmart = smartSingle + smartDouble > 0;
+  const hasStraight = straightSingle + straightDouble > 0;
+  const mixed = hasSmart && hasStraight;
+  return { smartSingle, smartDouble, straightSingle, straightDouble, mixed, hasSmart, hasStraight };
+}
+
+function scanDashTypes(text) {
+  const emDash = (text.match(/—/g) || []).length;
+  const enDash = (text.match(/–/g) || []).length;
+  const hyphen = (text.match(/ - /g) || []).length;
+  const mixedDash = (emDash > 0 || enDash > 0) && hyphen > 0;
+  return { emDash, enDash, hyphen, mixedDash };
+}
+
+function scanEllipsis(text) {
+  const unicodeEllipsis = (text.match(/…/g) || []).length;
+  const threeDotsEllipsis = (text.match(/\.\.\./g) || []).length;
+  return { unicodeEllipsis, threeDotsEllipsis, mixed: unicodeEllipsis > 0 && threeDotsEllipsis > 0 };
+}
+
+function scanNonStandardSpaces(text) {
+  // Count non-standard whitespace (not regular space or \n or \t)
+  const nbsp = (text.match(/\u00A0/g) || []).length;
+  const narrowNbsp = (text.match(/\u202F/g) || []).length;
+  const ideographicSpace = (text.match(/\u3000/g) || []).length;
+  const enSpace = (text.match(/\u2002/g) || []).length;
+  const emSpace = (text.match(/\u2003/g) || []).length;
+  return { nbsp, narrowNbsp, ideographicSpace, enSpace, emSpace,
+    total: nbsp + narrowNbsp + ideographicSpace + enSpace + emSpace };
+}
+
+function scanUnicodeBlocks(text) {
+  let latin = 0, cyrillic = 0, greek = 0, arabic = 0, cjk = 0, other = 0;
+  for (let i = 0; i < text.length; i++) {
+    const cp = text.codePointAt(i);
+    if (cp < 0x0250) latin++;
+    else if (cp >= 0x0400 && cp <= 0x04FF) cyrillic++;
+    else if (cp >= 0x0370 && cp <= 0x03FF) greek++;
+    else if (cp >= 0x0600 && cp <= 0x06FF) arabic++;
+    else if (cp >= 0x4E00 && cp <= 0x9FFF) cjk++;
+    else if (cp > 0x007F) other++;
+  }
+  return { latin, cyrillic, greek, arabic, cjk, other };
+}
+
+function calcForensicScore(invisible, homoglyphs, quotes, dashes, ellipsis, spaces) {
+  let score = 0;
+  const flags = [];
+
+  // Invisible chars — very strong signal
+  const highRiskInvisible = invisible.filter(c => c.risk === 'high');
+  const medRiskInvisible = invisible.filter(c => c.risk === 'med');
+  if (highRiskInvisible.length > 0) {
+    score += Math.min(60, highRiskInvisible.reduce((a,c) => a + c.count, 0) * 15);
+    flags.push(`${highRiskInvisible.length} high-risk invisible char type(s) detected`);
+  }
+  if (medRiskInvisible.length > 0) score += Math.min(20, medRiskInvisible.length * 5);
+
+  // Non-breaking spaces — common AI artifact
+  if (spaces.nbsp > 3) { score += 15; flags.push(`${spaces.nbsp} non-breaking spaces (common AI/auto-format artifact)`); }
+  else if (spaces.nbsp > 0) score += 5;
+
+  // Homoglyphs — can be intentional obfuscation
+  if (homoglyphs.length > 0) {
+    score += Math.min(40, homoglyphs.reduce((a,c) => a+c.count, 0) * 8);
+    flags.push(`${homoglyphs.length} homoglyph type(s) — foreign script chars disguised as Latin`);
+  }
+
+  // Quote mixing — messy sign of pasted AI text edited by human
+  if (quotes.mixed) { score += 12; flags.push('Mixed smart/straight quotes — copy-paste boundary artifact'); }
+
+  // Dash mixing
+  if (dashes.mixedDash) { score += 8; flags.push('Mixed dash types — em/en dash with hyphen-dash'); }
+
+  // Ellipsis mixing
+  if (ellipsis.mixed) { score += 6; flags.push('Mixed ellipsis styles (… vs ...)'); }
+
+  // Unicode ellipsis alone is common in AI
+  if (ellipsis.unicodeEllipsis > 0 && !ellipsis.mixed) score += 4;
+
+  return { score: Math.min(100, score), flags };
+}
+
+function runForensicAnalysis(text) {
+  const invisible = scanInvisibleChars(text);
+  const homoglyphs = scanHomoglyphs(text);
+  const quotes = scanQuoteMixing(text);
+  const dashes = scanDashTypes(text);
+  const ellipsis = scanEllipsis(text);
+  const spaces = scanNonStandardSpaces(text);
+  const blocks = scanUnicodeBlocks(text);
+  const { score, flags } = calcForensicScore(invisible, homoglyphs, quotes, dashes, ellipsis, spaces);
+  return { invisible, homoglyphs, quotes, dashes, ellipsis, spaces, blocks, score, flags };
+}
+
+function renderForensicPanel(f) {
+  const banner = document.getElementById('forensicBanner');
+
+  const allChars = [
+    ...f.invisible.map(c => ({
+      display: `U+${c.cp.toString(16).toUpperCase().padStart(4,'0')}`,
+      glyph: '·',
+      name: c.name,
+      count: c.count,
+      risk: c.risk,
+      note: c.note
+    })),
+    ...f.homoglyphs.map(c => ({
+      display: `U+${c.cp.toString(16).toUpperCase().padStart(4,'0')}`,
+      glyph: c.foreign,
+      name: `Homoglyph: "${c.foreign}" (looks like "${c.latin}") — ${c.script}`,
+      count: c.count,
+      risk: 'high',
+      note: `Disguised as Latin "${c.latin}"`
+    }))
+  ];
+
+  const totalAnomalies = allChars.reduce((a,c)=>a+c.count,0)
+    + (f.quotes.mixed ? 1 : 0) + (f.dashes.mixedDash ? 1 : 0)
+    + (f.spaces.nbsp > 0 ? f.spaces.nbsp : 0);
+
+  let verdictCls, verdictMsg;
+  if (f.score >= 30) {
+    verdictCls = 'suspicious';
+    verdictMsg = `⚠ Forensic anomalies detected. ${f.flags.join(' · ')}. These signals survive editing and indicate machine-generated or processed text.`;
+  } else if (f.score >= 10) {
+    verdictCls = 'caution';
+    verdictMsg = `⚡ Minor character anomalies present. ${f.flags.join(' · ')}. Could be copy-paste artifacts or auto-formatting.`;
+  } else {
+    verdictCls = 'clean';
+    verdictMsg = '✓ No significant forensic anomalies detected. Character encoding appears clean and consistent with human typing.';
+  }
+
+  const quoteStatus = f.quotes.mixed ? `<span style="color:var(--warn)">MIXED ⚠</span>` :
+    f.quotes.hasSmart ? `<span style="color:var(--accent)">Smart only</span>` :
+    f.quotes.hasStraight ? `<span style="color:var(--accent)">Straight only</span>` :
+    `<span style="color:var(--muted)">None</span>`;
+
+  const scriptList = [];
+  if (f.blocks.cyrillic > 0) scriptList.push(`Cyrillic (${f.blocks.cyrillic})`);
+  if (f.blocks.greek > 0) scriptList.push(`Greek (${f.blocks.greek})`);
+  if (f.blocks.arabic > 0) scriptList.push(`Arabic (${f.blocks.arabic})`);
+  if (f.blocks.cjk > 0) scriptList.push(`CJK (${f.blocks.cjk})`);
+
+  banner.innerHTML = `
+    <div class="forensic-title">🔬 Layer 2 — Forensic Character Scan</div>
+    <div class="forensic-grid">
+      <div class="forensic-stat">
+        <div class="forensic-stat-label">Invisible Chars</div>
+        <div class="forensic-stat-value ${f.invisible.length > 0 ? 'suspicious' : 'clean'}">${f.invisible.reduce((a,c)=>a+c.count,0)}</div>
+        <div class="forensic-stat-sub">${f.invisible.length} type(s) found</div>
+      </div>
+      <div class="forensic-stat">
+        <div class="forensic-stat-label">Homoglyphs</div>
+        <div class="forensic-stat-value ${f.homoglyphs.length > 0 ? 'suspicious' : 'clean'}">${f.homoglyphs.reduce((a,c)=>a+c.count,0)}</div>
+        <div class="forensic-stat-sub">${f.homoglyphs.length} script type(s)</div>
+      </div>
+      <div class="forensic-stat">
+        <div class="forensic-stat-label">Non-Std Spaces</div>
+        <div class="forensic-stat-value ${f.spaces.total > 3 ? 'suspicious' : f.spaces.total > 0 ? 'caution' : 'clean'}">${f.spaces.total}</div>
+        <div class="forensic-stat-sub">NBSP + narrow + em</div>
+      </div>
+      <div class="forensic-stat">
+        <div class="forensic-stat-label">Quote Style</div>
+        <div class="forensic-stat-sub" style="margin-top:6px">${quoteStatus}</div>
+        <div class="forensic-stat-sub">${f.quotes.smartDouble + f.quotes.smartSingle} smart · ${f.quotes.straightDouble + f.quotes.straightSingle} straight</div>
+      </div>
+      <div class="forensic-stat">
+        <div class="forensic-stat-label">Dash Types</div>
+        <div class="forensic-stat-value ${f.dashes.mixedDash ? 'caution' : 'clean'}">${f.dashes.mixedDash ? 'MIXED' : 'OK'}</div>
+        <div class="forensic-stat-sub">em:${f.dashes.emDash} en:${f.dashes.enDash} hyph:${f.dashes.hyphen}</div>
+      </div>
+      <div class="forensic-stat">
+        <div class="forensic-stat-label">Foreign Scripts</div>
+        <div class="forensic-stat-value ${scriptList.length > 0 ? 'suspicious' : 'clean'}">${scriptList.length > 0 ? scriptList.length : '0'}</div>
+        <div class="forensic-stat-sub">${scriptList.length > 0 ? scriptList.join(', ') : 'Latin only'}</div>
+      </div>
+    </div>
+
+    ${allChars.length > 0 ? `
+    <div class="char-map-wrap">
+      <div class="char-map-title">// Anomalous Character Map</div>
+      ${allChars.map(c => `
+        <div class="char-entry">
+          <span class="char-glyph">${c.glyph}</span>
+          <span class="char-codepoint">${c.display}</span>
+          <span class="char-name">${c.name}</span>
+          <span class="char-count">×${c.count}</span>
+          <span class="char-risk ${c.risk}">${c.risk.toUpperCase()}</span>
+        </div>`).join('')}
+    </div>` : `
+    <div class="char-map-wrap">
+      <div class="char-map-title">// Character Map</div>
+      <div class="clean-msg">✓ No anomalous characters found in the character map</div>
+    </div>`}
+
+    <div class="forensic-verdict ${verdictCls}">${verdictMsg}</div>
+  `;
+}
+
+function getLevel(score) {
+  if (score >= 72) return 'warn';
+  if (score >= 45) return 'caution';
+  return 'ok';
+}
+
+function getLevelColor(level) {
+  if (level === 'warn') return 'var(--accent2)';
+  if (level === 'caution') return 'var(--warn)';
+  return 'var(--accent)';
+}
+
+async function runAnalysis() {
+  // Use textarea content first, fall back to extracted file text
+  const textareaVal = document.getElementById('docInput').value.trim();
+  const text = textareaVal || fileText.trim();
+
+  if (!text || text.split(/\s+/).length < 30) {
+    if (fileMetadata && !textareaVal && !fileText.trim()) {
+      alert('The file was loaded but text could not be extracted automatically (this is common with scanned/image PDFs). Please paste the text manually into the box below.');
+    } else {
+      alert('Please paste a document with at least 30 words for analysis.');
+    }
+    return;
+  }
+
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('analyzeBtn').disabled = true;
+  const loading = document.getElementById('loading');
+  loading.classList.add('active');
+
+  const steps = [
+    'Tokenizing corpus...',
+    'Computing perplexity model...',
+    'Analyzing sentence burstiness...',
+    'Measuring lexical diversity...',
+    'Scanning AI phrase fingerprints...',
+    'Evaluating hedging density...',
+    'Detecting passive construction...',
+    'Mapping transition uniformity...',
+    'Calculating clause depth...',
+    'Analyzing punctuation variance...',
+    'Measuring paragraph rhythms...',
+    'Profiling vocabulary rarity...',
+    'Assessing register shifts...',
+    '[v2] Scanning n-gram repetition...',
+    '[v2] Mapping sentence opener patterns...',
+    '[v2] Fingerprinting punctuation style...',
+    '[v2] Analyzing vocabulary clustering...',
+    '[ LAYER 2 ] Scanning invisible characters...',
+    '[ LAYER 2 ] Detecting Unicode homoglyphs...',
+    '[ LAYER 2 ] Auditing quote & dash encoding...',
+    '[ LAYER 2 ] Mapping non-standard whitespace...',
+    '[ LAYER 2 ] Analyzing script blocks...',
+    'Synthesizing dual-layer verdict...'
+  ];
+
+  for (let i = 0; i < steps.length; i++) {
+    document.getElementById('loadingStep').textContent = steps[i];
+    await new Promise(r => setTimeout(r, 160));
+  }
+
+  // Run all analyses
+  const perplexity = calcPerplexity(text);
+  const burstiness = calcBurstiness(text);
+  const lexical = calcLexicalDiversity(text);
+  const { score: aiPhrases, found: phrasesFound } = calcAIPhrases(text);
+  const hedging = calcHedging(text);
+  const passive = calcPassiveVoice(text);
+  const transitions = calcTransitions(text);
+  const clauseDepth = calcClauseDepth(text);
+  const punctuation = calcPunctuationVariance(text);
+  const paraUniformity = calcParagraphUniformity(text);
+  const rareWords = calcRareWords(text);
+  const formality = calcFormalityShift(text);
+  // New v2 checks
+  const ngramRep = calcNgramRepetition(text);
+  const openerDiv = calcSentenceOpenerDiversity(text);
+  const punctFinger = calcPunctuationFingerprint(text);
+  const vocabCluster = calcVocabClustering(text);
+
+  // Run forensic layer
+  const forensic = runForensicAnalysis(text);
+
+  // Rebalanced weights — reduced burstiness/formality reliance, added 4 new vectors
+  // Total = 1.0 across 16 checks
+  const weights = [
+    0.08, // perplexity
+    0.08, // burstiness (reduced — too gameable)
+    0.08, // lexical diversity
+    0.12, // AI phrases
+    0.04, // hedging
+    0.04, // passive voice
+    0.06, // transitions
+    0.04, // clause depth
+    0.05, // punctuation variance
+    0.05, // paragraph uniformity
+    0.04, // rare words
+    0.04, // formality (reduced — too gameable)
+    0.10, // n-gram repetition (new)
+    0.09, // sentence opener diversity (new)
+    0.09, // punctuation fingerprint (new)
+    0.10, // vocab clustering (new)
+  ];
+  const scores = [perplexity, burstiness, lexical, aiPhrases, hedging, passive, transitions,
+    clauseDepth, punctuation, paraUniformity, rareWords, formality,
+    ngramRep, openerDiv, punctFinger, vocabCluster];
+  const composite = scores.reduce((sum, s, i) => sum + s * weights[i], 0);
+  const aiScore = Math.round(composite);
+
+  // Combined score (linguistic 80% + forensic 20%, forensic can only push UP)
+  const forensicBoost = forensic.score * 0.20;
+  const combinedScore = Math.round(Math.min(100, composite * 0.80 + forensicBoost + (forensic.score > 40 ? forensic.score * 0.10 : 0)));
+
+  loading.classList.remove('active');
+  document.getElementById('analyzeBtn').disabled = false;
+
+  // Render forensic panel
+  renderForensicPanel(forensic);
+
+  // Render metadata panel (if file was loaded)
+  const metaAnalysis = analyzeMetadata(fileMetadata);
+  renderMetaPanel(fileMetadata, metaAnalysis);
+
+  // Fold metadata score into combined (metadata can only push score UP, never down below linguistic)
+  const metaBoost = metaAnalysis.metaAiScore * 0.15;
+  const trueCombined = Math.round(Math.min(100,
+    combinedScore * (fileMetadata ? 0.85 : 1.0) + (fileMetadata ? metaBoost : 0)
+  ));
+
+  // Verdict
+  const banner = document.getElementById('verdictBanner');
+  const icon = document.getElementById('verdictIcon');
+  const title = document.getElementById('verdictTitle');
+  const sub = document.getElementById('verdictSub');
+  const ring = document.getElementById('scoreRing');
+  const num = document.getElementById('scoreNum');
+
+  let cls, iconStr, titleStr, subStr;
+
+  if (trueCombined >= 68) {
+    cls = 'ai';
+    iconStr = '🤖';
+    titleStr = 'Likely AI-Generated';
+    subStr = `${trueCombined}% combined confidence across all layers. Strong AI signals detected in linguistic patterns${forensic.score >= 20 ? ', forensic character encoding' : ''}${fileMetadata && metaAnalysis.metaAiScore >= 20 ? ', and file metadata' : ''}. High regularity in sentence rhythm, phrase patterns, and stylistic register indicate machine authorship.`;
+  } else if (trueCombined >= 42) {
+    cls = 'mixed';
+    iconStr = '⚠️';
+    titleStr = 'Ambiguous / Mixed Origin';
+    subStr = `${trueCombined}% combined AI confidence. Signals are mixed. This may be AI-assisted human writing, heavily edited AI output, or a human writer with a formal structured style. Inconclusive.`;
+  } else {
+    cls = 'human';
+    iconStr = '✍️';
+    titleStr = 'Likely Human-Written';
+    subStr = `${trueCombined}% combined AI confidence. Most signals across all layers point to human authorship — natural burstiness, register variation, clean character encoding, and authentic stylistic irregularities detected.`;
+  }
+
+  banner.className = `verdict-banner ${cls}`;
+  ring.className = `score-ring ${cls}`;
+  icon.textContent = iconStr;
+  title.textContent = titleStr;
+  sub.textContent = subStr;
+  num.textContent = trueCombined + '%';
+
+  // Update dual score panels to include metadata layer
+  document.getElementById('dualScores').innerHTML = `
+    <div class="score-panel">
+      <div class="score-panel-label">// Layer 1 — Linguistic</div>
+      <div class="score-panel-num" style="color:${aiScore >= 68 ? 'var(--accent2)' : aiScore >= 42 ? 'var(--warn)' : 'var(--accent)'}">${aiScore}%</div>
+      <div class="score-panel-sub">16 linguistic vectors</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-panel-label">// Layer 2 — Forensic</div>
+      <div class="score-panel-num" style="color:${forensic.score >= 30 ? 'var(--accent2)' : forensic.score >= 10 ? 'var(--warn)' : 'var(--accent)'}">${forensic.score}%</div>
+      <div class="score-panel-sub">Character & encoding scan</div>
+    </div>
+    ${fileMetadata ? `
+    <div class="score-panel" style="grid-column: 1 / -1;">
+      <div class="score-panel-label">// Layer 3 — File Metadata</div>
+      <div class="score-panel-num" style="color:${metaAnalysis.metaAiScore >= 40 ? 'var(--accent2)' : metaAnalysis.metaAiScore >= 15 ? 'var(--warn)' : 'var(--accent)'}">${metaAnalysis.metaAiScore}%</div>
+      <div class="score-panel-sub">Author · timestamps · edit history · revision markers</div>
+    </div>` : ''}
+  `;
+
+  // Metrics
+
+  const metrics = [
+    { name: 'Sentence Burstiness', value: burstiness, desc: 'Variance in sentence length. AI text is flat; humans burst.', unit: '%' },
+    { name: 'AI Phrase Density', value: aiPhrases, desc: `Found ${phrasesFound.length} known AI phrases: ${phrasesFound.slice(0,3).join(', ')}${phrasesFound.length > 3 ? '...' : ''}`, unit: '%' },
+    { name: 'Perplexity Score', value: perplexity, desc: 'Word choice regularity. High = predictable = AI-like.', unit: '%' },
+    { name: 'Lexical Diversity', value: lexical, desc: 'Unique word ratio. AI repeats vocabulary more.', unit: '%' },
+    { name: 'Transition Uniformity', value: transitions, desc: 'Density of linking phrases. AI overuses them structurally.', unit: '%' },
+    { name: 'Register Stability', value: formality, desc: 'How fixed the formality level is. Humans shift register.', unit: '%' },
+    { name: 'Paragraph Uniformity', value: paraUniformity, desc: 'AI paragraphs are consistently similar in length.', unit: '%' },
+    { name: 'Passive Voice Rate', value: passive, desc: 'AI tends to use more passive constructions.', unit: '%' },
+    { name: 'N-gram Repetition', value: ngramRep, desc: 'AI repeats 3-word sequences even in casual writing. Humans almost never do.', unit: '%' },
+    { name: 'Opener Diversity', value: openerDiv, desc: 'AI starts sentences with structurally similar patterns repeatedly.', unit: '%' },
+    { name: 'Punctuation Fingerprint', value: punctFinger, desc: 'Em-dash overuse and parenthetical uniformity — classic AI stylistic habits.', unit: '%' },
+    { name: 'Vocab Clustering', value: vocabCluster, desc: 'AI spreads domain terms evenly. Humans cluster them around key points.', unit: '%' },
+  ];
+
+  const grid = document.getElementById('metricsGrid');
+  grid.innerHTML = metrics.map(m => {
+    const lv = getLevel(m.value);
+    const color = getLevelColor(lv);
+    return `
+      <div class="metric-card ${lv}">
+        <div class="metric-name">
+          <span class="dot" style="background:${color}"></span>
+          ${m.name}
+        </div>
+        <div class="metric-value" style="color:${color}">${Math.round(m.value)}${m.unit}</div>
+        <div class="metric-bar-wrap">
+          <div class="metric-bar" style="width:${m.value}%;background:${color}"></div>
+        </div>
+        <div class="metric-desc">${m.desc}</div>
+      </div>`;
+  }).join('');
+
+  // Signals
+  const signals = [];
+  if (burstiness > 65) signals.push({ icon: '🔴', title: 'Flat sentence rhythm detected', detail: 'Sentence lengths are unusually uniform — characteristic of LLM output.' });
+  if (aiPhrases > 40) signals.push({ icon: '🔴', title: `${phrasesFound.length} AI fingerprint phrases found`, detail: `Flagged: "${phrasesFound.slice(0,5).join('", "')}"` });
+  if (ngramRep > 50) signals.push({ icon: '🔴', title: 'High n-gram repetition', detail: 'Repeated 3-word sequences detected — AI repeats phrases even in casual text.' });
+  if (openerDiv > 60) signals.push({ icon: '🔴', title: 'Sentence openers are structurally repetitive', detail: 'Multiple sentences begin with the same word patterns — a strong AI tell.' });
+  if (punctFinger > 50) signals.push({ icon: '🟠', title: 'AI punctuation fingerprint', detail: 'Em-dash overuse or parenthetical uniformity detected — hallmark AI stylistic habits.' });
+  if (vocabCluster > 65) signals.push({ icon: '🟠', title: 'Domain terms distributed too evenly', detail: 'Key vocabulary is spread uniformly — AI distributes terms; humans cluster them.' });
+  if (perplexity > 65) signals.push({ icon: '🟠', title: 'Predictable word choices', detail: 'Vocabulary shows low entropy — words are highly predictable in sequence.' });
+  if (paraUniformity > 65) signals.push({ icon: '🟠', title: 'Paragraph length uniformity', detail: 'Paragraphs are suspiciously similar in length — AI tends to pad evenly.' });
+  if (transitions > 55) signals.push({ icon: '🟠', title: 'Over-structured transitions', detail: 'Heavy use of linking language suggests structured generation.' });
+  if (formality > 65) signals.push({ icon: '🟠', title: 'Zero register shift', detail: 'Writing stays in one formal register throughout — humans vary naturally.' });
+  if (burstiness < 35) signals.push({ icon: '🟢', title: 'Strong sentence burstiness', detail: 'High variance in sentence length is a positive human signal.' });
+  if (ngramRep < 15) signals.push({ icon: '🟢', title: 'Low n-gram repetition', detail: 'No repeated 3-word sequences — consistent with natural human writing.' });
+  if (openerDiv < 25) signals.push({ icon: '🟢', title: 'Diverse sentence openers', detail: 'Sentences begin in varied ways — strong human authorship signal.' });
+  if (vocabCluster < 30) signals.push({ icon: '🟢', title: 'Natural vocabulary clustering', detail: 'Domain terms cluster around specific points — human writing pattern.' });
+  if (aiPhrases < 15) signals.push({ icon: '🟢', title: 'No AI phrase patterns', detail: 'No known LLM fingerprint phrases detected in this document.' });
+  if (formality < 30) signals.push({ icon: '🟢', title: 'Natural register variation', detail: 'Writing shifts between formal and informal — very human pattern.' });
+  if (lexical < 30) signals.push({ icon: '🟢', title: 'High lexical diversity', detail: 'Strong unique word ratio — human writers naturally vary vocabulary more.' });
+  if (signals.length === 0) signals.push({ icon: '⚪', title: 'No strong signals in either direction', detail: 'Analysis is inconclusive — signals balance each other out.' });
+
+  document.getElementById('signalsList').innerHTML = signals.map(s => `
+    <div class="signal">
+      <span class="signal-icon">${s.icon}</span>
+      <div class="signal-text">
+        <strong>${s.title}</strong>
+        <span>${s.detail}</span>
+      </div>
+    </div>`).join('');
+
+  // Log
+  const logLines = [
+    { t: '00:00', m: `Document loaded — ${text.split(/\s+/).length} words, ${getSentences(text).length} sentences, ${getParagraphs(text).length} paragraphs`, cls: 'highlight' },
+    { t: '00:01', m: `Perplexity proxy: ${Math.round(perplexity)}%` },
+    { t: '00:02', m: `Burstiness: ${Math.round(burstiness)}%`, cls: burstiness > 65 ? 'warn' : '' },
+    { t: '00:03', m: `Lexical diversity (TTR): ${Math.round(lexical)}%` },
+    { t: '00:04', m: `AI phrase scan: ${phrasesFound.length} phrases matched — ${phrasesFound.slice(0,4).join(', ')||'none'}`, cls: phrasesFound.length > 3 ? 'warn' : '' },
+    { t: '00:05', m: `Hedging density: ${Math.round(hedging)}%` },
+    { t: '00:06', m: `Passive voice: ${Math.round(passive)}%` },
+    { t: '00:07', m: `Transition word density: ${Math.round(transitions)}%` },
+    { t: '00:08', m: `Clause depth index: ${Math.round(clauseDepth)}%` },
+    { t: '00:09', m: `Punctuation variance: ${Math.round(punctuation)}%` },
+    { t: '00:10', m: `Paragraph uniformity: ${Math.round(paraUniformity)}%` },
+    { t: '00:11', m: `Rare word profile: ${Math.round(rareWords)}%` },
+    { t: '00:12', m: `Register stability: ${Math.round(formality)}%` },
+    { t: '00:13', m: `[v2] N-gram repetition: ${Math.round(ngramRep)}% — repeated 3-word sequences detected`, cls: ngramRep > 50 ? 'warn' : '' },
+    { t: '00:14', m: `[v2] Sentence opener diversity: ${Math.round(openerDiv)}%`, cls: openerDiv > 60 ? 'warn' : '' },
+    { t: '00:15', m: `[v2] Punctuation fingerprint: ${Math.round(punctFinger)}% — em-dash & parenthetical analysis`, cls: punctFinger > 50 ? 'warn' : '' },
+    { t: '00:16', m: `[v2] Vocabulary clustering: ${Math.round(vocabCluster)}% — domain term distribution mapped`, cls: vocabCluster > 65 ? 'warn' : '' },
+    { t: '00:17', m: `Rebalanced composite computed across 16 vectors`, cls: 'highlight' },
+    { t: '00:18', m: `[ L2 ] Invisible char scan: ${forensic.invisible.reduce((a,c)=>a+c.count,0)} chars found across ${forensic.invisible.length} Unicode type(s)`, cls: forensic.invisible.length > 0 ? 'warn' : '' },
+    { t: '00:19', m: `[ L2 ] Homoglyph scan: ${forensic.homoglyphs.reduce((a,c)=>a+c.count,0)} substitution(s) across ${forensic.homoglyphs.length} script type(s)`, cls: forensic.homoglyphs.length > 0 ? 'warn' : '' },
+    { t: '00:20', m: `[ L2 ] Quote encoding: ${forensic.quotes.mixed ? 'MIXED smart+straight — copy-paste artifact' : forensic.quotes.hasSmart ? 'Smart quotes only' : 'Straight quotes only'}`, cls: forensic.quotes.mixed ? 'warn' : '' },
+    { t: '00:21', m: `[ L2 ] Non-standard spaces: ${forensic.spaces.total} (NBSP:${forensic.spaces.nbsp} narrow:${forensic.spaces.narrowNbsp} em:${forensic.spaces.emSpace})`, cls: forensic.spaces.total > 3 ? 'warn' : '' },
+    { t: '00:22', m: `[ L2 ] Script blocks: ${[forensic.blocks.cyrillic>0?'Cyrillic':'',forensic.blocks.greek>0?'Greek':'',forensic.blocks.arabic>0?'Arabic':''].filter(Boolean).join(', ')||'Latin only'}`, cls: (forensic.blocks.cyrillic+forensic.blocks.greek+forensic.blocks.arabic)>0?'warn':'' },
+    { t: '00:23', m: `[ L2 ] Forensic score: ${forensic.score}% — ${forensic.flags.length} flag(s) raised`, cls: forensic.score >= 30 ? 'warn' : 'highlight' },
+    { t: '00:24', m: `[ L3 ] Metadata score: ${fileMetadata ? metaAnalysis.metaAiScore + '%' : 'N/A — no file loaded'}`, cls: fileMetadata && metaAnalysis.metaAiScore >= 40 ? 'warn' : '' },
+    { t: '00:25', m: `FINAL COMBINED SCORE: ${trueCombined}% — Verdict: ${titleStr.toUpperCase()}`, cls: trueCombined >= 68 ? 'warn' : trueCombined >= 42 ? '' : 'highlight' },
+  ];
+
+  document.getElementById('logBox').innerHTML = logLines.map(l => `
+    <div class="log-line">
+      <span class="log-time">[${l.t}]</span>
+      <span class="log-msg ${l.cls||''}">${l.m}</span>
+    </div>`).join('');
+
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+</script>
+</body>
+</html>
