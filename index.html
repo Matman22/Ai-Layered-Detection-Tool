@@ -1353,7 +1353,10 @@ function calcDensityMelody(text, { windowSize = 25, threshold = 0.32, granularit
   }
 
   const dataPoints = curve.length;
-  if (dataPoints < 3) return { score: 50, dataPoints, confidence: 0 };
+  // Require at least 2× the window size in data points. Below this ratio the
+  // rolling average degenerates: consecutive windows share most of their values,
+  // producing an artificially flat (monotonic) curve regardless of text type.
+  if (dataPoints < windowSize * 2) return { score: 50, dataPoints: 0, confidence: 0 };
 
   const n = dataPoints;
   const mean = curve.reduce((a, b) => a + b, 0) / n;
