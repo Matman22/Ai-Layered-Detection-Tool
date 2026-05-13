@@ -636,6 +636,50 @@
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Tab bar */
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 12px 20px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+    white-space: nowrap;
+    margin-bottom: -1px;
+    flex-shrink: 0;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* No-file placeholder */
+  .no-file-placeholder {
+    text-align: center;
+    padding: 48px 24px;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .no-file-placeholder .placeholder-icon { font-size: 32px; margin-bottom: 12px; }
+  .no-file-placeholder strong { display: block; color: var(--text); font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -704,24 +748,51 @@
       </div>
     </div>
 
-    <div class="meta-panel" id="metaPanel" style="display:none"></div>
-
-    <div class="dual-scores" id="dualScores"></div>
-
-    <div class="forensic-banner" id="forensicBanner"></div>
-
-    <div id="layer5Panel"></div>
-
-    <div class="metrics-grid" id="metricsGrid"></div>
-
-    <div class="signals-section">
-      <div class="section-title">Detected Signals</div>
-      <div class="signals-list" id="signalsList"></div>
+    <!-- Tab navigation -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+      <button class="tab-btn" data-tab="linguistic" onclick="switchTab('linguistic')">Linguistic</button>
+      <button class="tab-btn" data-tab="forensic" onclick="switchTab('forensic')">Forensic</button>
+      <button class="tab-btn" data-tab="consistency" onclick="switchTab('consistency')">Consistency</button>
+      <button class="tab-btn" data-tab="metadata" onclick="switchTab('metadata')">Metadata</button>
+      <button class="tab-btn" data-tab="log" onclick="switchTab('log')">Log</button>
     </div>
 
-    <div class="log-section">
-      <div class="section-title">Analysis Log</div>
-      <div class="log-box" id="logBox"></div>
+    <!-- Overview: score panels + signals -->
+    <div class="tab-pane active" id="tab-overview">
+      <div class="dual-scores" id="dualScores"></div>
+      <div class="signals-section">
+        <div class="section-title">Detected Signals</div>
+        <div class="signals-list" id="signalsList"></div>
+      </div>
+    </div>
+
+    <!-- Linguistic: 16 metric cards -->
+    <div class="tab-pane" id="tab-linguistic">
+      <div class="metrics-grid" id="metricsGrid"></div>
+    </div>
+
+    <!-- Forensic: Layer 2 character scan -->
+    <div class="tab-pane" id="tab-forensic">
+      <div class="forensic-banner" id="forensicBanner"></div>
+    </div>
+
+    <!-- Consistency: Layer 5 micro-habits -->
+    <div class="tab-pane" id="tab-consistency">
+      <div id="layer5Panel"></div>
+    </div>
+
+    <!-- Metadata: Layer 3 file metadata -->
+    <div class="tab-pane" id="tab-metadata">
+      <div class="meta-panel" id="metaPanel"></div>
+    </div>
+
+    <!-- Log: full analysis log -->
+    <div class="tab-pane" id="tab-log">
+      <div class="log-section">
+        <div class="section-title">Analysis Log</div>
+        <div class="log-box" id="logBox"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1148,8 +1219,15 @@ function analyzeMetadata(meta) {
 
 function renderMetaPanel(meta, analysis) {
   const panel = document.getElementById('metaPanel');
-  if (!meta) { panel.style.display = 'none'; return; }
-  panel.style.display = 'block';
+  if (!meta) {
+    panel.innerHTML = `
+      <div class="no-file-placeholder">
+        <div class="placeholder-icon">📁</div>
+        <strong>No file loaded</strong>
+        Drop a .docx or .pdf above, then re-run analysis to enable file metadata scanning.
+      </div>`;
+    return;
+  }
 
   const { rows, flags, metaAiScore } = analysis;
   const cls = metaAiScore >= 40 ? 'suspicious' : metaAiScore >= 15 ? 'caution' : 'clean';
@@ -1927,6 +2005,13 @@ function getLevelColor(level) {
   return 'var(--accent)';
 }
 
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab-btn[data-tab="${name}"]`).classList.add('active');
+  document.getElementById(`tab-${name}`).classList.add('active');
+}
+
 async function runAnalysis() {
   // Use textarea content first, fall back to extracted file text
   const textareaVal = document.getElementById('docInput').value.trim();
@@ -2224,6 +2309,7 @@ async function runAnalysis() {
       <span class="log-msg ${l.cls||''}">${l.m}</span>
     </div>`).join('');
 
+  switchTab('overview');
   document.getElementById('results').style.display = 'block';
   document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
