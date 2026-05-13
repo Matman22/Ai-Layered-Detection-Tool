@@ -755,6 +755,7 @@
       <button class="tab-btn" data-tab="forensic" onclick="switchTab('forensic')">Forensic</button>
       <button class="tab-btn" data-tab="consistency" onclick="switchTab('consistency')">Consistency</button>
       <button class="tab-btn" data-tab="metadata" onclick="switchTab('metadata')">Metadata</button>
+      <button class="tab-btn" data-tab="montecarlo" onclick="switchTab('montecarlo')">Monte Carlo</button>
       <button class="tab-btn" data-tab="log" onclick="switchTab('log')">Log</button>
     </div>
 
@@ -785,6 +786,11 @@
     <!-- Metadata: Layer 3 file metadata -->
     <div class="tab-pane" id="tab-metadata">
       <div class="meta-panel" id="metaPanel"></div>
+    </div>
+
+    <!-- Monte Carlo: random subset sampling analysis -->
+    <div class="tab-pane" id="tab-montecarlo">
+      <div id="monteCarloPanel"></div>
     </div>
 
     <!-- Log: full analysis log -->
@@ -1433,6 +1439,87 @@ function calcDensityMelodyEnsemble(text) {
 
   const label = agreement >= 75 ? 'HIGH CONFIDENCE' : agreement >= 50 ? 'MODERATE' : 'LOW CONFIDENCE';
   return { score, agreement, validRuns: valid.length, runs, label };
+}
+
+// Extracts a random word-count-bounded substring from text, on word boundaries.
+function sampleTextSubset(text, windowSize) {
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  if (words.length <= windowSize) return text;
+  const maxStart = words.length - windowSize;
+  const startIdx = Math.floor(Math.random() * (maxStart + 1));
+  return words.slice(startIdx, startIdx + windowSize).join(' ');
+}
+
+// Runs sampleCount independent random-window analyses on the document.
+// Each sample scores 5 signals; variance in those scores reveals origin inconsistency.
+function runMonteCarloAnalysis(text) {
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  const wc = words.length;
+
+  // Adaptive parameters: shorter docs need larger windows to get signal
+  let sampleCount, windowPct;
+  if (wc < 200)       { sampleCount = 8;  windowPct = 0.60; }
+  else if (wc < 500)  { sampleCount = 12; windowPct = 0.40; }
+  else if (wc < 1000) { sampleCount = 16; windowPct = 0.35; }
+  else                { sampleCount = 20; windowPct = 0.25; }
+
+  const windowSize = Math.max(50, Math.round(wc * windowPct));
+
+  if (windowSize >= wc) {
+    return { score: 50, mean: 50, stdDev: 0, range: 0, consistency: 100, mixed: false,
+             classification: 'INCONCLUSIVE', heatmap: new Array(10).fill(null),
+             samples: [], validSamples: 0 };
+  }
+
+  const sampleResults = [];
+  for (let i = 0; i < sampleCount; i++) {
+    const maxStart = wc - windowSize;
+    const startWord = Math.floor(Math.random() * (maxStart + 1));
+    const subset = words.slice(startWord, startWord + windowSize).join(' ');
+    const startPct = Math.round((startWord / wc) * 100);
+
+    const b = calcBurstiness(subset);
+    const l = calcLexicalDiversity(subset);
+    const n = calcNgramRepetition(subset);
+    const a = calcAIPhrases(subset).score;
+    const p = calcPunctuationFingerprint(subset);
+    const avg = Math.round((b + l + n + a + p) / 5);
+    sampleResults.push({ score: avg, startPct });
+  }
+
+  const sScores = sampleResults.map(r => r.score);
+  const mean = Math.round(sScores.reduce((a, b) => a + b, 0) / sScores.length);
+  const variance = sScores.reduce((a, b) => a + (b - mean) ** 2, 0) / sScores.length;
+  const stdDev = Math.round(Math.sqrt(variance));
+  const range = Math.max(...sScores) - Math.min(...sScores);
+
+  // Signal B: consistency = how tightly scores cluster (high = uniform origin)
+  const consistency = Math.max(0, Math.min(100, 100 - stdDev * 2));
+
+  // Signal C: high variance in both range and stdDev is the mixed-origin tell
+  const mixed = range > 35 && stdDev > 18;
+
+  let classification;
+  if (mixed)                                 classification = 'MIXED ORIGIN';
+  else if (consistency >= 75 && mean >= 65)  classification = 'CONSISTENTLY AI';
+  else if (consistency >= 75 && mean <= 40)  classification = 'CONSISTENTLY HUMAN';
+  else                                       classification = 'INCONCLUSIVE';
+
+  // Positional heatmap: 10 buckets spanning 0–100% of the document
+  const heatmap = new Array(10).fill(null);
+  const heatCounts = new Array(10).fill(0);
+  const heatSums   = new Array(10).fill(0);
+  for (const r of sampleResults) {
+    const bucket = Math.min(9, Math.floor(r.startPct / 10));
+    heatSums[bucket]  += r.score;
+    heatCounts[bucket]++;
+  }
+  for (let i = 0; i < 10; i++) {
+    if (heatCounts[i] > 0) heatmap[i] = Math.round(heatSums[i] / heatCounts[i]);
+  }
+
+  return { score: mean, mean, stdDev, range, consistency, mixed,
+           classification, heatmap, samples: sampleResults, validSamples: sampleResults.length };
 }
 
 // Tier 1: near-exclusive LLM fingerprints — even 1 hit is meaningful evidence
@@ -2211,6 +2298,79 @@ function renderLayer5Panel(layer5) {
   `;
 }
 
+function renderMonteCarloPanel(mc) {
+  const panel = document.getElementById('monteCarloPanel');
+  if (!panel) return;
+
+  if (mc.validSamples === 0) {
+    panel.innerHTML = `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:4px;padding:20px 24px;color:var(--muted);font-size:13px;">Insufficient text for Monte Carlo sampling analysis. Paste at least 150 words to enable this layer.</div>`;
+    return;
+  }
+
+  const clsStyle = {
+    'MIXED ORIGIN':       { color: 'var(--warn)',    bg: 'rgba(255,170,0,0.08)',   border: 'rgba(255,170,0,0.40)'   },
+    'CONSISTENTLY AI':    { color: 'var(--accent2)', bg: 'rgba(255,60,110,0.08)',  border: 'rgba(255,60,110,0.40)'  },
+    'CONSISTENTLY HUMAN': { color: 'var(--accent)',  bg: 'rgba(0,255,157,0.08)',   border: 'rgba(0,255,157,0.40)'   },
+    'INCONCLUSIVE':       { color: '#888',           bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.18)' },
+  };
+  const cs = clsStyle[mc.classification] || clsStyle['INCONCLUSIVE'];
+
+  // Heatmap: each bucket is a colored segment; null buckets are dark grey
+  const heatSegments = mc.heatmap.map((val, i) => {
+    const label = `Bucket ${i * 10}–${i * 10 + 10}%`;
+    if (val === null) {
+      return `<div title="${label} — no samples" style="flex:1;height:28px;background:rgba(255,255,255,0.07);border-radius:2px;"></div>`;
+    }
+    // Interpolate green→yellow→red based on score
+    const r = Math.round(Math.min(255, val < 50 ? val * 5.1 : 255));
+    const g = Math.round(Math.min(255, val > 50 ? (100 - val) * 5.1 : 255));
+    return `<div title="${label} · avg: ${val}%" style="flex:1;height:28px;background:rgb(${r},${g},40);border-radius:2px;opacity:0.85;"></div>`;
+  }).join('');
+
+  let classDetail, callout = '';
+  if (mc.classification === 'MIXED ORIGIN') {
+    classDetail = `Score variance is unusually high across ${mc.validSamples} samples (range: ${mc.range}%, σ: ${mc.stdDev}%). Different document sections show markedly different AI-probability profiles — a strong signal of mixed human/AI authorship or stitched-together content.`;
+    callout = `<div style="margin-top:12px;padding:12px 16px;border-radius:3px;font-size:12px;line-height:1.6;border:1px solid rgba(255,170,0,0.4);background:rgba(255,170,0,0.07);color:var(--warn)">⚠ Mixed-origin signal: document sections are internally inconsistent. This is the strongest available indicator of AI/human stitching or partial AI editing.</div>`;
+  } else if (mc.classification === 'CONSISTENTLY AI') {
+    classDetail = `Score is uniformly high across all ${mc.validSamples} samples (mean: ${mc.mean}%, consistency: ${mc.consistency}%). No section of the document deviates toward human-typical variance — consistent with end-to-end AI generation.`;
+  } else if (mc.classification === 'CONSISTENTLY HUMAN') {
+    classDetail = `Score is uniformly low across all ${mc.validSamples} samples (mean: ${mc.mean}%, consistency: ${mc.consistency}%). All sampled sections score below the AI threshold — consistent with natural human authorship throughout.`;
+  } else {
+    classDetail = mc.validSamples < 6
+      ? `Only ${mc.validSamples} samples available — results are indicative but not conclusive. Mean score: ${mc.mean}%, consistency: ${mc.consistency}%.`
+      : `Signals are mixed or moderate — cannot confidently classify from sampling alone. Mean: ${mc.mean}%, consistency: ${mc.consistency}%.`;
+  }
+
+  const stats = [
+    { label: 'Mean Score',    value: mc.mean + '%',    desc: 'Average AI probability across all samples' },
+    { label: 'Std Deviation', value: mc.stdDev + '%',  desc: 'Score spread — high = inconsistent origin' },
+    { label: 'Score Range',   value: mc.range + '%',   desc: 'Max − min score across all samples' },
+    { label: 'Samples Run',   value: mc.validSamples,  desc: 'Random subsets analyzed independently' },
+  ];
+
+  panel.innerHTML = `
+    <div style="background:rgba(0,170,255,0.06);border:1px solid rgba(0,170,255,0.35);border-radius:4px;padding:20px 24px;margin-bottom:32px;position:relative;overflow:hidden;">
+      <div style="position:absolute;top:12px;right:16px;font-size:9px;letter-spacing:0.15em;color:#00aaff;opacity:0.5;">// MONTE CARLO SAMPLING</div>
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:800;color:#00aaff;margin-bottom:16px;">
+        🎲 Monte Carlo — Random Subset Sampling
+        <span style="float:right;font-size:11px;font-weight:700;padding:3px 10px;border-radius:3px;background:${cs.bg};color:${cs.color};border:1px solid ${cs.border}">${mc.classification}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+        ${stats.map(s => `<div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:3px;padding:12px 14px;">
+          <div style="font-size:9px;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">${s.label}</div>
+          <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:${cs.color}">${s.value}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px;">${s.desc}</div>
+        </div>`).join('')}
+      </div>
+      <div style="margin-bottom:8px;font-size:9px;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;">Positional Heatmap — Document Position (0% → 100%)</div>
+      <div style="display:flex;gap:3px;margin-bottom:6px;">${heatSegments}</div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:12px;">Each segment = 10% of document · green = human-typical · red = AI-typical · grey = no samples in range</div>
+      <div style="padding:12px 16px;border-radius:3px;font-size:12px;line-height:1.6;border:1px solid ${cs.border};background:${cs.bg};color:${cs.color}">${classDetail}</div>
+      ${callout}
+    </div>
+  `;
+}
+
 function getLevel(score) {
   if (score >= 72) return 'warn';
   if (score >= 45) return 'caution';
@@ -2276,6 +2436,8 @@ async function runAnalysis() {
     '[ LAYER 5 ] Analyzing Oxford comma habits...',
     '[ LAYER 5 ] Checking number formatting...',
     '[ LAYER 5 ] Mapping authorial micro-patterns...',
+    '[ MONTE CARLO ] Sampling random document subsets...',
+    '[ MONTE CARLO ] Computing score variance across samples...',
     'Synthesizing multi-layer verdict...'
   ];
 
@@ -2304,6 +2466,7 @@ async function runAnalysis() {
   const vocabCluster = calcVocabClustering(text);
   const densityMelodyEnsemble = calcDensityMelodyEnsemble(text);
   const densityMelody = densityMelodyEnsemble.score;
+  const monteCarlo = runMonteCarloAnalysis(text);
 
   // Run forensic layer
   const forensic = runForensicAnalysis(text);
@@ -2316,26 +2479,27 @@ async function runAnalysis() {
   // Total = 1.0 across 17 checks
   const weights = [
     0.01, // perplexity         — unreliable proxy, reduced
-    0.12, // burstiness         — most reliable structural signal
+    0.09, // burstiness         — most reliable structural signal (−0.03, partial overlap with MC)
     0.08, // lexical diversity
     0.07, // AI phrases         — misses modern AI, reduced
     0.01, // hedging            — rarely decisive
     0.01, // passive voice      — rarely decisive
     0.06, // transitions
     0.02, // clause depth
-    0.10, // punctuation variance  — reliable uniformity signal
+    0.07, // punctuation variance  — reliable uniformity signal (−0.03, MC includes punctFinger)
     0.10, // paragraph uniformity  — reliable uniformity signal
     0.02, // rare words
     0.10, // register stability    — reliable
-    0.05, // n-gram repetition
+    0.04, // n-gram repetition     (−0.01, MC includes ngramRep)
     0.05, // sentence opener diversity
     0.07, // punctuation fingerprint
-    0.06, // vocab clustering
+    0.05, // vocab clustering      (−0.01, MC includes lexical)
     0.07, // density melody     — flat information curve = AI formal text
+    0.08, // monte carlo        — sampling variance across random subsets
   ];
   const scores = [perplexity, burstiness, lexical, aiPhrases, hedging, passive, transitions,
     clauseDepth, punctuation, paraUniformity, rareWords, formality,
-    ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody];
+    ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody, monteCarlo.mean];
   // Evidence accumulation: only signals above neutral (50) contribute.
   // Absence of an AI pattern is neutral evidence, not human evidence.
   const evidence = scores.reduce((sum, s, i) => sum + Math.max(0, s - 50) * weights[i], 0);
@@ -2366,6 +2530,9 @@ async function runAnalysis() {
 
   // Render authorial consistency panel
   renderLayer5Panel(layer5);
+
+  // Render Monte Carlo panel
+  renderMonteCarloPanel(monteCarlo);
 
   // Render metadata panel (if file was loaded)
   const metaAnalysis = analyzeMetadata(fileMetadata);
@@ -2418,7 +2585,7 @@ async function runAnalysis() {
     <div class="score-panel">
       <div class="score-panel-label">// Layer 1 — Linguistic</div>
       <div class="score-panel-num" style="color:${aiScore >= 50 ? 'var(--accent2)' : aiScore >= 20 ? 'var(--warn)' : 'var(--accent)'}">${aiScore}%</div>
-      <div class="score-panel-sub">16 linguistic vectors</div>
+      <div class="score-panel-sub">17 linguistic + Monte Carlo vectors</div>
     </div>
     <div class="score-panel">
       <div class="score-panel-label">// Layer 2 — Forensic</div>
@@ -2497,6 +2664,9 @@ async function runAnalysis() {
   if (lexical < 30) signals.push({ icon: '🟢', title: 'High lexical diversity', detail: 'Strong unique word ratio — human writers naturally vary vocabulary more.' });
   if (layer5.score >= 60) signals.push({ icon: '🔴', title: 'Highly consistent micro-habits', detail: 'Stylistic habits (contractions, punctuation, openers) are unnaturally uniform — a strong AI consistency signal.' });
   if (layer5.score < 25) signals.push({ icon: '🟢', title: 'Natural micro-habit variation', detail: 'Contraction use, punctuation habits, and opener patterns vary naturally across the document.' });
+  if (monteCarlo.mixed) signals.push({ icon: '🔴', title: 'Mixed-origin text detected', detail: `Monte Carlo sampling found high score variance (range: ${monteCarlo.range}%, σ: ${monteCarlo.stdDev}%) — document sections have inconsistent AI-probability profiles, suggesting AI/human stitching.` });
+  if (monteCarlo.consistency >= 80 && monteCarlo.mean >= 65) signals.push({ icon: '🔴', title: 'AI-consistent across all sampled sections', detail: `Monte Carlo: mean ${monteCarlo.mean}%, consistency ${monteCarlo.consistency}% across ${monteCarlo.validSamples} samples — document scores uniformly high throughout.` });
+  if (monteCarlo.consistency >= 80 && monteCarlo.mean <= 35) signals.push({ icon: '🟢', title: 'Human-consistent across all sampled sections', detail: `Monte Carlo: mean ${monteCarlo.mean}%, consistency ${monteCarlo.consistency}% across ${monteCarlo.validSamples} samples — all sections score low, consistent with natural human writing.` });
   if (signals.length === 0) signals.push({ icon: '⚪', title: 'No strong signals in either direction', detail: 'Analysis is inconclusive — signals balance each other out.' });
 
   document.getElementById('signalsList').innerHTML = signals.map(s => `
@@ -2528,7 +2698,8 @@ async function runAnalysis() {
     { t: '00:15', m: `[v2] Punctuation fingerprint: ${Math.round(punctFinger)}% — em-dash & parenthetical analysis`, cls: punctFinger > 50 ? 'warn' : '' },
     { t: '00:16', m: `[v2] Vocabulary clustering: ${Math.round(vocabCluster)}% — domain term distribution mapped`, cls: vocabCluster > 65 ? 'warn' : '' },
     { t: '00:17', m: `[ensemble] Density melody: runs [${densityMelodyEnsemble.runs.filter(r=>r.dataPoints>=3&&r.confidence>0).map(r=>r.score).join(', ')||'none'}] → weighted avg ${densityMelody}% · agreement ${densityMelodyEnsemble.agreement}% · ${densityMelodyEnsemble.label}`, cls: densityMelody > 65 ? 'warn' : densityMelodyEnsemble.validRuns === 0 ? '' : 'highlight' },
-    { t: '00:18', m: `Rebalanced composite computed across 17 vectors`, cls: 'highlight' },
+    { t: '00:18', m: `[MC] Monte Carlo: ${monteCarlo.validSamples} samples · mean ${monteCarlo.mean}% · σ ${monteCarlo.stdDev}% · range ${monteCarlo.range}% · ${monteCarlo.classification}`, cls: monteCarlo.mixed ? 'warn' : monteCarlo.validSamples === 0 ? '' : 'highlight' },
+    { t: '00:18', m: `Rebalanced composite computed across 18 vectors`, cls: 'highlight' },
     { t: '00:19', m: `[ L2 ] Invisible char scan: ${forensic.invisible.reduce((a,c)=>a+c.count,0)} chars found across ${forensic.invisible.length} Unicode type(s)`, cls: forensic.invisible.length > 0 ? 'warn' : '' },
     { t: '00:19', m: `[ L2 ] Homoglyph scan: ${forensic.homoglyphs.reduce((a,c)=>a+c.count,0)} substitution(s) across ${forensic.homoglyphs.length} script type(s)`, cls: forensic.homoglyphs.length > 0 ? 'warn' : '' },
     { t: '00:20', m: `[ L2 ] Quote encoding: ${forensic.quotes.mixed ? 'MIXED smart+straight — copy-paste artifact' : forensic.quotes.hasSmart ? 'Smart quotes only' : 'Straight quotes only'}`, cls: forensic.quotes.mixed ? 'warn' : '' },
