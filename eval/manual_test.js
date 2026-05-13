@@ -313,11 +313,10 @@ function runDetection(text) {
   const ANCHOR_IDX = [1, 3, 11, 15];
   const anchorsHot = ANCHOR_IDX.filter(i => raw[i] > 70).length;
   const CONV_BONUS = [0, 0, 5, 12, 18]; // bonus for 0/1/2/3/4 anchors above threshold
-  // Smoking gun: dense AI phrase usage is a near-certain signal
-  const smokingGun = raw[3] > 85 ? 8 : 0;
+  // Smoking gun: saturated AI phrase usage (score=100) means multiple tier-1 LLM
+  // fingerprints co-occurred — stronger evidence than any other single signal.
+  const smokingGun = raw[3] >= 100 ? 30 : raw[3] > 85 ? 15 : 0;
   const composite = Math.min(100, baseComposite + CONV_BONUS[Math.min(anchorsHot, 4)] + smokingGun);
-
-  const adjusted = composite * reliability + 25 * (1 - reliability);
 
   const contraction = calcContractionConsistency(text);
   const oxford      = calcOxfordCommaConsistency(text);
@@ -326,11 +325,11 @@ function runDetection(text) {
   const openers     = calcParagraphOpenerConsistency(text);
   const l5 = Math.round(contraction*0.25+oxford*0.20+numbers*0.20+prepEnding*0.15+openers*0.20);
 
-  const combined = Math.round(Math.min(100, adjusted*0.75 + 0*0.15 + l5*0.10));
+  const combined = Math.round(Math.min(100, composite*0.75 + 0*0.15 + l5*0.10));
   const paras = getParagraphs(text).length;
   const sents = getSentences(text).length;
 
-  return { raw, baseComposite, composite, adjusted: Math.round(adjusted), l5, combined, reliability, wordCount, sents, paras,
+  return { raw, baseComposite, composite, l5, combined, reliability, wordCount, sents, paras,
            anchorsHot, convBonus: CONV_BONUS[Math.min(anchorsHot, 4)], smokingGun,
            l5signals: { contraction, oxford, numbers, prepEnding, openers } };
 }

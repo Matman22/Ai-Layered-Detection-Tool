@@ -16,12 +16,14 @@ function getParagraphs(text) {
   return [sents.slice(0,t).join(' '),sents.slice(t,t*2).join(' '),sents.slice(t*2).join(' ')].filter(g=>g.trim().length>20);
 }
 function getNaturalParagraphs(t){return t.split(/\n\s*\n/).filter(p=>p.trim().length>20);}
-const AI_PHRASES=['in conclusion','it is worth noting','it is important to note','furthermore','moreover','in summary','to summarize','delve into','it is crucial','in the realm of','as we explore','it becomes evident','navigating','multifaceted','nuanced','at its core','it is essential','foster','leveraging','paradigm','tapestry','underscore','pivotal','utilize',"in today's world",'in the context of','underpins','embodies','holistic','robust','streamline','synergy','it goes without saying','needless to say','when it comes to','let us','one can argue','it should be noted','in light of','it is clear that','first and foremost','last but not least'];
+const AI_PHRASES_T1=['it is worth noting','it is important to note',"it's worth noting",'it should be noted','it is important to understand','it is clear that','it becomes evident','it goes without saying','needless to say','delve into','delves into','multifaceted','at its core','in the realm of','as we explore','tapestry','underscore','pivotal','embodies','underpins','first and foremost','last but not least',"in today's world","in today's fast-paced","in today's ever-changing",'one can argue','it is crucial to note','it is essential to note'];
+const AI_PHRASES_T2=['in conclusion','furthermore','moreover','in summary','to summarize','it is crucial','it is essential','in the context of','leveraging','foster','paradigm','robust','streamline','synergy','utilize','navigating','holistic','nuanced','in light of','when it comes to','let us','consequently','in addition','moving forward','going forward','best practices','game-changer','cutting-edge','proactive','actionable','impactful','transformative','stakeholders'];
+const AI_PHRASES=[...AI_PHRASES_T1,...AI_PHRASES_T2];
 const HEDGE_WORDS=['perhaps','possibly','might','may','could','seem','appears','generally','typically','often','usually','tend to','suggest','indicate'];
 function calcPerplexity(t){const w=tokenize(t);if(!w.length)return 0;const l=w.map(x=>x.length);const a=l.reduce((a,b)=>a+b,0)/l.length;const v=l.reduce((a,b)=>a+(b-a)**2,0)/l.length;return Math.max(0,Math.min(100,100-(v*12)));}
 function calcBurstiness(t){const s=getSentences(t);if(s.length<3)return 50;const l=s.map(x=>x.trim().split(/\s+/).length);const a=l.reduce((a,b)=>a+b,0)/l.length;const std=Math.sqrt(l.reduce((a,b)=>a+(b-a)**2,0)/l.length);return Math.max(0,Math.min(100,100-(std/a*90)));}
 function calcLexicalDiversity(t){const w=tokenize(t);if(w.length<10)return 50;return Math.max(0,Math.min(100,100-(new Set(w).size/w.length*130)));}
-function calcAIPhrases(t){const l=t.toLowerCase();const wc=tokenize(t).length||1;const h=AI_PHRASES.filter(p=>l.includes(p)).length;return Math.min(100,Math.round(h/wc*1800));}
+function calcAIPhrases(t){const l=t.toLowerCase();const t1=AI_PHRASES_T1.filter(p=>l.includes(p)).length;const t2=AI_PHRASES_T2.filter(p=>l.includes(p)).length;const t1Score=t1===0?0:Math.min(95,58+(t1-1)*12);const t2Score=t2===0?0:t2===1?15:Math.min(55,27+(t2-2)*8);const combo=t1>=1&&t2>=2?12:t1>=1&&t2>=1?5:0;return Math.min(100,t1Score+t2Score+combo);}
 function calcHedging(t){const w=tokenize(t);if(!w.length)return 0;const h=HEDGE_WORDS.reduce((a,p)=>{const re=new RegExp('\\b'+p.replace(' ','\\s+')+'\\b','gi');return a+(t.match(re)||[]).length;},0);return Math.min(100,Math.round(h/w.length*1000));}
 function calcPassiveVoice(t){const s=getSentences(t);if(!s.length)return 0;const p=s.filter(x=>/\b(is|are|was|were|be|been|being)\s+\w+ed\b/i.test(x)).length;return Math.round(p/s.length*100);}
 function calcTransitions(t){const tw=['however','therefore','furthermore','moreover','consequently','additionally','nevertheless','subsequently','in contrast','on the other hand','in addition','as a result','for example','for instance','in fact','indeed','meanwhile','likewise','similarly','in conclusion','to summarize','overall'];const w=tokenize(t).length||1;const c=tw.reduce((a,p)=>{return a+(t.toLowerCase().match(new RegExp('\\b'+p.replace(' ','\\s+')+'\\b','g'))||[]).length;},0);return Math.min(100,Math.round(c/w*800));}
@@ -60,11 +62,10 @@ function runDetection(text) {
   const anchorIdx=[1,3,11,15];
   const anchorsHot=anchorIdx.filter(i=>raw[i]>70).length;
   const convBonus=[0,0,5,12,18][Math.min(anchorsHot,4)];
-  const smokingGun=raw[3]>85?8:0;
+  const smokingGun=raw[3]>=100?30:raw[3]>85?15:0;
   const composite=Math.min(100,baseComposite+convBonus+smokingGun);
-  const adjusted=composite*reliability+25*(1-reliability);
   const l5=Math.round(calcContractionConsistency(text)*0.25+calcOxfordCommaConsistency(text)*0.20+calcNumberFormattingConsistency(text)*0.20+calcPrepositionalEndingConsistency(text)*0.15+calcParagraphOpenerConsistency(text)*0.20);
-  const combined=Math.round(Math.min(100,adjusted*0.75+l5*0.10));
+  const combined=Math.round(Math.min(100,composite*0.75+l5*0.10));
   return { raw, baseComposite, composite, combined, reliability };
 }
 function verdict(s){return s>=50?'LIKELY AI':s>=20?'AMBIGUOUS':'LIKELY HUMAN';}
