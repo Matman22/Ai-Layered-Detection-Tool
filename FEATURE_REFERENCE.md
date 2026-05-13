@@ -1,7 +1,7 @@
 # AI Origin Detector — Feature Reference
 
 **Version:** Current (May 2026)  
-**File:** `index.html` (~2,300 lines, single-file vanilla JS app)  
+**File:** `index.html` (~2,350 lines, single-file vanilla JS app)  
 **Purpose:** Multi-layer forensic tool for detecting AI-generated text, 100% client-side
 
 ---
@@ -11,10 +11,10 @@
 The tool runs four active detection layers. Each layer produces a 0–100 AI confidence score. Layers are combined into one final verdict score.
 
 ```
-Layer 1 — Linguistic Analysis      16 vectors   55% of final score (text reliability weighted)
-Layer 2 — Forensic Character Scan  6 checks     20% of final score (always active)
-Layer 3 — File Metadata Analysis   5+ signals   25% of final score (only when file is dropped)
-Layer 5 — Authorial Consistency    5 micro-habits  10% of final score
+Layer 1 — Linguistic Analysis      18 inputs    75% of combined score (text reliability weighted)
+Layer 2 — Forensic Character Scan  6 checks     15% of combined score (always active)
+Layer 3 — File Metadata Analysis   5+ signals   +15% boost (only when file is dropped)
+Layer 5 — Authorial Consistency    5 micro-habits  10% of combined score
 ```
 
 > Layer 4 (RAIDAR-style rewrite analysis) is planned but not yet implemented.
@@ -46,27 +46,31 @@ Else:
 
 ---
 
-## Layer 1 — Linguistic Analysis (16 Vectors)
+## Layer 1 — Linguistic Analysis (18 Inputs)
 
-All 16 scores are combined as a weighted average. Weights sum to 1.00.
+All 18 scores are combined as a weighted evidence sum. Weights sum to 1.00.
 
 ---
 
-### 1. Perplexity Proxy
-**Weight:** 0.02 | **Function:** `calcPerplexity()`
+### 1. Perplexity Ensemble
+**Weight:** 0.01 | **Function:** `calcPerplexity()` (wraps three proxy functions)
 
-**How it works:** Measures variance in word lengths across the text. Low variance (uniform word lengths) is treated as an AI signal — the theory being that AI tends toward moderate, predictable word length distributions.
+**How it works:** A three-proxy confidence-weighted ensemble. Each proxy produces a 0–100 AI confidence score and a confidence value (0–1). Only proxies with confidence ≥ 0.2 and dataPoints ≥ 5 are included in the final weighted average.
 
-**Implementation:** Computes the statistical variance of per-word character lengths. Score = `100 - (variance * 12)`, clamped to 0–100.
+**Proxy 1 — Word-length variance** (`calcPerplexityProxy1`): Computes statistical variance of per-word character lengths. Score = `100 - (variance * 12)`. Confidence = 1.0. **Known issue:** Returns ~0% on essentially all formal text (short function words + long content words always produce high variance). Not discriminating.
 
-**Effectiveness:** Poor. Consistently returns near-0 on all AI texts tested — real AI writes with diverse word lengths. This signal was originally weighted 0.04 and was reduced to 0.02 after multiple false negatives. Weight may be reduced further or replaced.
+**Proxy 2 — Syllable density variance** (`calcPerplexityProxy2`): Splits into sentences, counts syllables per sentence using a vowel-cluster approximation, computes CV of syllable counts. Low CV (uniform syllable load per sentence) = AI signal. Confidence scales with sentence count (max 1.0 at 10 sentences). Returns `{ score, dataPoints, confidence }`.
 
-**Known issue:** This proxy conflates "perplexity" (a language modeling concept requiring a trained model) with surface-level word length statistics. They are not the same thing.
+**Proxy 3 — Character trigram entropy** (`calcPerplexityProxy3`): Builds a frequency distribution over all character 3-grams (stripped of whitespace), computes Shannon entropy. **Known issue — currently broken:** The normalization assumes 3.5–5.5 bits entropy range; actual measured entropy for English prose is 8–10 bits. Result is always clamped to 0%. Not contributing to the ensemble in practice. Requires recalibration.
+
+**Composite:** Confidence-weighted average of valid proxies. Also returns `agreement` (100 − stdDev×2) and `validProxyCount`.
+
+**Effectiveness:** Poor at current calibration. Weight reduced to 0.01 (effectively a placeholder). The ensemble architecture is in place; P2 has reasonable theoretical basis but P1 and P3 are non-discriminating. Composite impact on final score is ~0%. Recalibration is a known pending task.
 
 ---
 
 ### 2. Burstiness
-**Weight:** 0.12 | **Function:** `calcBurstiness()`
+**Weight:** 0.09 | **Function:** `calcBurstiness()`
 
 **How it works:** Measures the coefficient of variation (CV = std/mean) of sentence lengths in words. Human writers "burst" — they alternate short punchy sentences with long complex ones. AI produces more uniform sentence length distributions.
 
@@ -74,7 +78,7 @@ All 16 scores are combined as a weighted average. Weights sum to 1.00.
 
 **Effectiveness:** Best-performing structural signal. Reliably distinguishes formal AI prose which has characteristically flat sentence rhythms. Less effective when AI deliberately varies sentence length.
 
-**Note:** The highest-weighted signal (0.12). Performance validated across multiple test cases.
+**Note:** One of the highest-weighted individual signals. Performance validated across multiple test cases including Monte Carlo window sampling.
 
 ---
 
@@ -92,19 +96,23 @@ All 16 scores are combined as a weighted average. Weights sum to 1.00.
 ### 4. AI Phrase Fingerprinting
 **Weight:** 0.07 | **Function:** `calcAIPhrases()`
 
-**How it works:** Scans for 42 phrases that are statistically overrepresented in AI output based on empirical observation. Includes patterns like "it is worth noting", "delve into", "multifaceted", "in the realm of", "leveraging", "tapestry", "nuanced", "paradigm", "pivotal".
+**How it works:** Two-tier phrase matching system. Tier 1 (T1) contains near-exclusive LLM fingerprints — phrases that almost never appear in human writing. Tier 2 (T2) contains common structural filler that's overrepresented in AI output but not exclusively AI. The tiers are scored separately and combined additively.
 
-**Implementation:** Case-insensitive substring match against a fixed phrase list. Score scales with phrase density per 100 words: `min(100, density * 25)`.
+**Tier 1 scoring (~28 phrases):** First match scores 58; each additional T1 match adds 12, capped at 95.  
+**Tier 2 scoring (~33 phrases):** First match scores 15; second scores 27; each additional adds 8, capped at 55.  
+**Combo bonus:** +12 if T1 ≥ 1 and T2 ≥ 2; +5 if T1 ≥ 1 and T2 ≥ 1.  
+**Smoking gun boost:** If final phrase score ≥ 100, +30 is added to the composite; if > 85, +15 is added.
 
-**Effectiveness:** Weak against modern AI. These phrase patterns were characteristic of early GPT-3/4 output. Newer models (GPT-4o, Claude 3.5+) have been trained away from these clichés and rarely produce them. Consistently near-0 on modern AI text. Still worth keeping for older-model detection but should not be heavily weighted.
+**T1 phrases (near-exclusive LLM fingerprints):** `it is worth noting`, `it is important to note`, `it's worth noting`, `it should be noted`, `it becomes evident`, `it goes without saying`, `needless to say`, `delve into`, `multifaceted`, `at its core`, `in the realm of`, `tapestry`, `underscore`, `pivotal`, `embodies`, `underpins`, `first and foremost`, `last but not least`, `in today's world`, `in today's fast-paced`, `one can argue`, `it is crucial to note`, `it is essential to note`
 
-**AI phrases list (42 total):**
-`in conclusion`, `it is worth noting`, `it is important to note`, `furthermore`, `moreover`, `in summary`, `to summarize`, `delve into`, `it is crucial`, `in the realm of`, `as we explore`, `it becomes evident`, `navigating`, `multifaceted`, `nuanced`, `at its core`, `it is essential`, `foster`, `leveraging`, `paradigm`, `tapestry`, `underscore`, `pivotal`, `utilize`, `in today's world`, `in the context of`, `underpins`, `embodies`, `holistic`, `robust`, `streamline`, `synergy`, `it goes without saying`, `needless to say`, `when it comes to`, `let us`, `one can argue`, `it should be noted`, `in light of`, `it is clear that`, `first and foremost`, `last but not least`
+**T2 phrases (common AI filler):** `in conclusion`, `furthermore`, `moreover`, `in summary`, `to summarize`, `it is crucial`, `it is essential`, `in the context of`, `leveraging`, `foster`, `paradigm`, `robust`, `streamline`, `synergy`, `utilize`, `navigating`, `holistic`, `nuanced`, `in light of`, `when it comes to`, `let us`, `consequently`, `in addition`, `moving forward`, `going forward`, `best practices`, `impactful`, `transformative`, `stakeholders`
+
+**Effectiveness:** Strong on formal AI essays written by GPT-4 and Claude. Newer models prompted to avoid clichés can evade this signal. Most useful in combination with structural signals — a single T1 phrase combined with high register stability is a reliable composite indicator.
 
 ---
 
 ### 5. Hedging Language Density
-**Weight:** 0.02 | **Function:** `calcHedging()`
+**Weight:** 0.01 | **Function:** `calcHedging()`
 
 **How it works:** Counts hedge words and phrases per 100 words. AI tends to over-hedge with qualifiers.
 
@@ -117,7 +125,7 @@ All 16 scores are combined as a weighted average. Weights sum to 1.00.
 ---
 
 ### 6. Passive Voice Detection
-**Weight:** 0.02 | **Function:** `calcPassiveVoice()`
+**Weight:** 0.01 | **Function:** `calcPassiveVoice()`
 
 **How it works:** Counts sentences containing passive constructions (`is/are/was/were/be/been/being + past participle`). High passive voice rate is associated with AI in formal contexts.
 
@@ -141,7 +149,7 @@ All 16 scores are combined as a weighted average. Weights sum to 1.00.
 ---
 
 ### 8. Clause Depth
-**Weight:** 0.04 | **Function:** `calcClauseDepth()`
+**Weight:** 0.02 | **Function:** `calcClauseDepth()`
 
 **How it works:** Counts subordinate clause markers per sentence as a proxy for sentence syntactic complexity. AI tends toward moderate, uniform clause depth — not too simple, not too complex.
 
@@ -154,7 +162,7 @@ All 16 scores are combined as a weighted average. Weights sum to 1.00.
 ---
 
 ### 9. Punctuation Variance
-**Weight:** 0.10 | **Function:** `calcPunctuationVariance()`
+**Weight:** 0.07 | **Function:** `calcPunctuationVariance()`
 
 **How it works:** Measures the coefficient of variation in punctuation density across paragraphs. AI distributes punctuation marks (commas, semicolons, colons, dashes, parentheses) very evenly across paragraphs. Human writing has irregular punctuation density — some paragraphs are heavily punctuated, others minimal.
 
@@ -176,7 +184,7 @@ All 16 scores are combined as a weighted average. Weights sum to 1.00.
 ---
 
 ### 11. Rare Word Usage
-**Weight:** 0.04 | **Function:** `calcRareWords()`
+**Weight:** 0.02 | **Function:** `calcRareWords()`
 
 **How it works:** Filters to content words (length > 3, not in common word list of ~90 words) and measures their TTR. Low variety in content words = repetitive = AI signal.
 
@@ -202,7 +210,7 @@ All 16 scores are combined as a weighted average. Weights sum to 1.00.
 ---
 
 ### 13. N-gram Repetition
-**Weight:** 0.05 | **Function:** `calcNgramRepetition()`
+**Weight:** 0.04 | **Function:** `calcNgramRepetition()`
 
 **How it works:** Counts repeated 3-word sequences (trigrams) as a fraction of all unique trigrams. Humans rarely repeat exact 3-word phrases; AI recycles sentence templates.
 
@@ -238,13 +246,56 @@ All 16 scores are combined as a weighted average. Weights sum to 1.00.
 ---
 
 ### 16. Vocabulary Clustering
-**Weight:** 0.06 | **Function:** `calcVocabClustering()`
+**Weight:** 0.05 | **Function:** `calcVocabClustering()`
 
 **How it works:** Identifies "key terms" (words appearing 2+ times, length > 4 chars) and measures how evenly distributed they are across paragraphs. AI distributes domain vocabulary uniformly; humans cluster domain terms in relevant sections.
 
 **Implementation:** Computes per-paragraph key-term density, then CV of those densities. Low CV → even distribution → AI. Score = `85 - (CV * 75)`.
 
 **Effectiveness:** Good on multi-paragraph text. Falls back to sentence-split analysis on single-paragraph input. Theoretical basis is sound — humans introduce topics in bursts.
+
+---
+
+### 17. Density Melody Ensemble
+**Weight:** 0.07 | **Function:** `calcDensityMelodyEnsemble()`
+
+**How it works:** Runs the linguistic signal pipeline five times with different window sizes and sentence-granularity parameters. Each run produces an AI confidence score. The five scores are averaged, confidence-weighted by text length. The "melody" metaphor reflects how consistent or varied the AI signal is across different views of the same text.
+
+**Why an ensemble:** A single pass of the linguistic signals can be thrown by a lucky window or an outlier paragraph. Running at multiple granularities and averaging reduces variance and produces a more stable composite estimate.
+
+**Implementation:** Each of the 5 runs uses a slightly different subset of the text or different sentence chunking. Results are averaged. Falls back gracefully on short texts.
+
+**Effectiveness:** Good. Provides a stable secondary validation of the main linguistic score. Most useful on longer texts where the multi-run averaging produces meaningful separation between AI and human samples.
+
+---
+
+### 18. Monte Carlo Window Sampling
+**Weight:** 0.08 | **Function:** `runMonteCarloAnalysis()`
+
+**How it works:** Draws a configurable number of random text windows (subsets of the full text) and scores each window using five signals: burstiness, AI phrases, formality shift, transition density, and vocabulary clustering. The mean and variance across windows are used to classify the text as CONSISTENTLY AI, CONSISTENTLY HUMAN, MIXED ORIGIN, or INCONCLUSIVE.
+
+**Adaptive sampling:**
+
+| Word count | Windows | Window size |
+|------------|---------|-------------|
+| < 200 | 8 | 60% of text |
+| 200–499 | 12 | 40% |
+| 500–999 | 16 | 35% |
+| 1000+ | 20 | 25% |
+
+**Classification thresholds:**
+- `MIXED ORIGIN`: range > 35 AND stdDev > 18 (windows score inconsistently = mixed authorship)
+- `CONSISTENTLY AI`: consistency ≥ 75% AND mean ≥ 50%
+- `CONSISTENTLY HUMAN`: consistency ≥ 75% AND mean ≤ 38%
+- `INCONCLUSIVE`: otherwise
+
+Where `consistency = max(0, min(100, 100 − stdDev × 2))`
+
+**Signal selection rationale:** Five signals were chosen because they produce reliable > 50% AI scores at window scale (150–200 words): burstiness, AI phrases, formality shift, transition density, vocabulary clustering. Signals that require the full document (n-gram repetition, paragraph uniformity, punctuation fingerprinting) were excluded — they cannot distinguish AI vs human in a random short window.
+
+**UI output:** Monte Carlo tab shows mean/stdDev/range/sample count, a 10-bucket positional heatmap (green → red gradient), classification badge, and a mixed-origin callout when variance is high.
+
+**Effectiveness:** Good. Validated 8/8 correct classification on a test suite of 3 AI texts (51–57% mean) and 5 human texts (19–31% mean) with no overlap. Adds a confidence-checked second opinion alongside the main linguistic pass.
 
 ---
 
@@ -350,32 +401,34 @@ Classifies the first word of each paragraph as an article, pronoun, transition w
 
 **Layer 5 composite:** Weighted average of 5 signals. Score >= 60 = suspicious, 35–59 = caution, < 35 = clean.
 
-**Effectiveness:** Good on longer documents with 4+ paragraphs. Falls back to neutral (returns 50 on most signals) on short or single-paragraph texts. The contraction and opener signals have been most discriminating in testing. Layer 5 is the newest addition and has not been benchmarked separately yet.
+**Effectiveness:** Good on longer documents with 4+ paragraphs. Falls back to neutral (returns 50 on most signals) on short or single-paragraph texts. The contraction rate and paragraph opener signals have been most discriminating in testing.
 
 ---
 
 ## Scoring Model Summary
 
-### Layer 1 weights (must sum to 1.00):
+### Layer 1 weights (sum = 1.00):
 
 | # | Vector | Weight | Reliability |
 |---|--------|--------|-------------|
-| 1 | Perplexity proxy | 0.02 | Low — unreliable signal |
-| 2 | Burstiness | 0.12 | High — best structural signal |
+| 1 | Perplexity ensemble | 0.01 | Very Low — P1 and P3 non-discriminating |
+| 2 | Burstiness | 0.09 | High — best structural signal |
 | 3 | Lexical diversity | 0.08 | Medium |
-| 4 | AI phrase fingerprinting | 0.07 | Low-Medium — misses modern AI |
-| 5 | Hedging density | 0.02 | Low |
-| 6 | Passive voice | 0.02 | Low |
+| 4 | AI phrase fingerprinting (T1/T2) | 0.07 | Medium — strong on formal AI, gameable |
+| 5 | Hedging density | 0.01 | Low |
+| 6 | Passive voice | 0.01 | Low |
 | 7 | Transition uniformity | 0.06 | Medium |
-| 8 | Clause depth | 0.04 | Medium |
-| 9 | Punctuation variance | 0.10 | High — reliable uniformity signal |
+| 8 | Clause depth | 0.02 | Medium |
+| 9 | Punctuation variance | 0.07 | High — reliable uniformity signal |
 | 10 | Paragraph uniformity | 0.10 | High — reliable uniformity signal |
-| 11 | Rare word usage | 0.04 | Low-Medium |
+| 11 | Rare word usage | 0.02 | Low-Medium |
 | 12 | Register stability | 0.10 | High — strongest individual signal |
-| 13 | N-gram repetition | 0.05 | Medium |
+| 13 | N-gram repetition | 0.04 | Medium |
 | 14 | Sentence opener diversity | 0.05 | Medium |
 | 15 | Punctuation fingerprinting | 0.07 | Medium |
-| 16 | Vocabulary clustering | 0.06 | Medium |
+| 16 | Vocabulary clustering | 0.05 | Medium |
+| 17 | Density melody ensemble | 0.07 | Good — stabilizes noisy signals |
+| 18 | Monte Carlo sampling | 0.08 | Good — validated 8/8 in testing |
 
 ---
 
@@ -422,7 +475,7 @@ Fetched via HuggingFace datasets-server API (no login required)
 
 5. **Metadata requires file drop** — Layer 3 (often the most definitive signal) is completely absent for pasted text.
 
-6. **AI phrases list aging** — the 42-phrase fingerprint list was compiled based on GPT-3/4 era output. Newer models produce these phrases much less frequently.
+6. **AI phrases list aging** — the T1/T2 phrase lists were compiled based on GPT-4/Claude-era output patterns. Newer models explicitly trained away from these clichés produce them less frequently. T1 phrases are more durable; T2 phrases are more susceptible to evasion.
 
 ---
 

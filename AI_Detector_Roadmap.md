@@ -150,7 +150,7 @@ rate, score conclusion novelty. No external dependencies.
 
 ---
 
-### Feature 3: Authorial Consistency Fingerprinting (Layer 5)
+### Feature 3: Authorial Consistency Fingerprinting (Layer 5) ✅ COMPLETED
 **What it is:** Measure micro-habit consistency across the document —
 contraction usage (don't vs do not), Oxford comma consistency, number
 formatting (3 vs three), sentence-final preposition tolerance, paragraph
@@ -162,10 +162,9 @@ because they're habits. AI varies these based on local context, producing
 detectable inconsistency. This doesn't penalize any particular style —
 a formal writer and a casual writer both score human for different reasons.
 
-**How to build it:** Pure JavaScript regex patterns. Count consistency
-ratios for each micro-habit. Weight and combine.
-
-**Difficulty:** Low-Medium. Straightforward to implement.
+**Status:** Fully implemented as Layer 5 — Authorial Consistency Fingerprinting.
+Contributes 10% of the final combined score. Five weighted micro-habit checks,
+each with a dedicated UI panel. Scores consistency of the habit, not the habit itself.
 
 ---
 
@@ -343,11 +342,11 @@ But the detection logic is all client-side already.
 
 ## Part 3 — What's Currently Built (Reference)
 
-### Layer 1 — Linguistic Analysis (16 vectors)
-- Perplexity proxy (word length variance)
+### Layer 1 — Linguistic Analysis (18 inputs)
+- Perplexity ensemble (3-proxy: word-length variance, syllable density, trigram entropy)
 - Sentence burstiness (length CV)
 - Lexical diversity (TTR)
-- AI phrase fingerprinting (42 known phrases)
+- AI phrase fingerprinting (T1: ~28 near-exclusive phrases; T2: ~33 common filler; tiered scoring)
 - Hedging language density
 - Passive voice rate
 - Transition word uniformity
@@ -360,6 +359,8 @@ But the detection logic is all client-side already.
 - Sentence opener diversity
 - Punctuation fingerprinting (em-dash, parenthetical)
 - Vocabulary clustering
+- **Density Melody Ensemble** (5 independent runs at varying window/granularity, confidence-weighted)
+- **Monte Carlo Window Sampling** (8–20 random windows, 5 signals per window, variance = mixed-origin signal)
 
 ### Layer 2 — Forensic Character Scan
 - 23 invisible Unicode character types
@@ -379,15 +380,23 @@ But the detection logic is all client-side already.
 - Save count (revision number)
 - PDF metadata extraction via PDF.js
 
+### Layer 5 — Authorial Consistency Fingerprinting
+- Contraction rate consistency across paragraphs
+- Oxford comma consistency
+- Number formatting consistency (words vs digits)
+- Sentence-final preposition consistency
+- Paragraph opener word-class consistency
+
 ### Infrastructure
 - Drag-and-drop file upload (TXT, DOCX, PDF, MD, RTF)
 - PDF.js integration for robust PDF parsing
-- Three-layer combined scoring system
+- Five-layer combined scoring system
 - Per-signal flag display with severity levels
+- Monte Carlo tab with positional heatmap and classification badge
 - Full analysis log
 - Runs 100% client-side — nothing sent anywhere
 
 ---
 
 *This document should be updated each time a new feature is implemented.*
-*Last updated: April 2026*
+*Last updated: May 2026*

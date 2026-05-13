@@ -10,11 +10,13 @@ https://matman22.github.io/Ai-Layered-Detection-Tool/
 
 ## How it works
 
-### Layer 1 — Linguistic Analysis (16 vectors)
-Perplexity modeling, sentence burstiness, lexical diversity, 
-AI phrase fingerprinting, n-gram repetition, sentence opener 
-diversity, punctuation fingerprinting, vocabulary clustering, 
-and more. Weights were rebalanced after adversarial pen testing.
+### Layer 1 — Linguistic Analysis (18 inputs)
+Perplexity modeling (3-proxy ensemble), sentence burstiness, 
+lexical diversity, AI phrase fingerprinting (T1/T2 tiered), 
+n-gram repetition, sentence opener diversity, punctuation 
+fingerprinting, vocabulary clustering, density melody ensemble, 
+Monte Carlo window sampling, and more. Weights were rebalanced 
+after adversarial pen testing.
 
 ### Layer 2 — Forensic Character Scan
 Scans raw Unicode codepoints for invisible characters 
@@ -29,6 +31,13 @@ fields, total editing time, revision session markers,
 created/modified timestamps, and application signatures. 
 A document with 0 minutes of editing time tells a different 
 story than one with 187.
+
+### Layer 5 — Authorial Consistency Fingerprinting
+Measures micro-habit consistency across five signals: contraction 
+rate, Oxford comma usage, number formatting, sentence-final 
+prepositions, and paragraph opener word class. Scores the 
+*consistency* of each habit, not the habit itself — so formal 
+and casual writers both score human for different reasons.
 
 ---
 
