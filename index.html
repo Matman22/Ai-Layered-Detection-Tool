@@ -2142,7 +2142,18 @@ async function runAnalysis() {
   // Evidence accumulation: only signals above neutral (50) contribute.
   // Absence of an AI pattern is neutral evidence, not human evidence.
   const evidence = scores.reduce((sum, s, i) => sum + Math.max(0, s - 50) * weights[i], 0);
-  const composite = Math.min(100, Math.round(evidence * 5));
+  const baseComposite = Math.min(100, Math.round(evidence * 5));
+
+  // Non-linear triggers: convergence bonus when anchor signals cluster together.
+  // Anchor signals (burstiness, AI phrases, register stability, vocab clustering) are
+  // the 4 most AI-specific indicators — coincidence of multiple strong signals is
+  // stronger evidence than each signal alone.
+  const anchorIdx = [1, 3, 11, 15];
+  const anchorsHot = anchorIdx.filter(i => scores[i] > 70).length;
+  const convBonus = [0, 0, 5, 12, 18][Math.min(anchorsHot, 4)];
+  // Smoking gun: dense AI phrase usage (>85%) is a near-certain tell
+  const smokingGunBonus = scores[3] > 85 ? 8 : 0;
+  const composite = Math.min(100, baseComposite + convBonus + smokingGunBonus);
   const aiScore = composite;
 
   // Combined score: L1 75% + L2 15% + L5 10% = 100%

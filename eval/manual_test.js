@@ -212,7 +212,18 @@ function runDetection(text) {
   // Evidence accumulation: only signals above neutral (50) contribute.
   // Absence of an AI pattern is neutral, not human evidence.
   const evidence = raw.reduce((sum, s, i) => sum + Math.max(0, s - 50) * WEIGHTS[i], 0);
-  const composite = Math.min(100, Math.round(evidence * 5));
+  const baseComposite = Math.min(100, Math.round(evidence * 5));
+
+  // Non-linear triggers: convergence bonus when anchor signals cluster together.
+  // Anchor signals are the 4 most AI-specific, reliable indicators.
+  // indices: 1=burstiness, 3=AI phrases, 11=register stability, 15=vocab clustering
+  const ANCHOR_IDX = [1, 3, 11, 15];
+  const anchorsHot = ANCHOR_IDX.filter(i => raw[i] > 70).length;
+  const CONV_BONUS = [0, 0, 5, 12, 18]; // bonus for 0/1/2/3/4 anchors above threshold
+  // Smoking gun: dense AI phrase usage is a near-certain signal
+  const smokingGun = raw[3] > 85 ? 8 : 0;
+  const composite = Math.min(100, baseComposite + CONV_BONUS[Math.min(anchorsHot, 4)] + smokingGun);
+
   const adjusted = composite * reliability + 25 * (1 - reliability);
 
   const contraction = calcContractionConsistency(text);
@@ -226,7 +237,8 @@ function runDetection(text) {
   const paras = getParagraphs(text).length;
   const sents = getSentences(text).length;
 
-  return { raw, composite, adjusted: Math.round(adjusted), l5, combined, reliability, wordCount, sents, paras,
+  return { raw, baseComposite, composite, adjusted: Math.round(adjusted), l5, combined, reliability, wordCount, sents, paras,
+           anchorsHot, convBonus: CONV_BONUS[Math.min(anchorsHot, 4)], smokingGun,
            l5signals: { contraction, oxford, numbers, prepEnding, openers } };
 }
 
@@ -249,7 +261,9 @@ function printResult(label, text) {
     console.log(`  ${NAMES[i].padEnd(20)} ${String(Math.round(s)).padStart(3)}%  ${bar}${flag}`);
   });
   console.log(`  ${'─'.repeat(58)}`);
-  console.log(`  ${'L1 composite'.padEnd(20)} ${r.composite}%`);
+  console.log(`  ${'L1 base'.padEnd(20)} ${r.baseComposite}%`);
+  const bonusStr = r.convBonus || r.smokingGun ? ` (+${r.convBonus} conv[${r.anchorsHot} anchors]${r.smokingGun ? ` +${r.smokingGun} 🔫` : ''})` : '';
+  console.log(`  ${'L1 composite'.padEnd(20)} ${r.composite}%${bonusStr}`);
   console.log(`  ${'L5 consistency'.padEnd(20)} ${r.l5}%  (contr:${r.l5signals.contraction} oxf:${r.l5signals.oxford} num:${r.l5signals.numbers} prep:${r.l5signals.prepEnding} open:${r.l5signals.openers})`);
   console.log(`\n  ► FINAL SCORE: ${r.combined}%  →  ${verdict(r.combined)}`);
 }
