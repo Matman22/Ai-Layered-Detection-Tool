@@ -1478,12 +1478,12 @@ function runMonteCarloAnalysis(text) {
     const subset = words.slice(startWord, startWord + windowSize).join(' ');
     const startPct = Math.round((startWord / wc) * 100);
 
-    const b = calcBurstiness(subset);
-    const l = calcLexicalDiversity(subset);
-    const n = calcNgramRepetition(subset);
-    const a = calcAIPhrases(subset).score;
-    const p = calcPunctuationFingerprint(subset);
-    const avg = Math.round((b + l + n + a + p) / 5);
+    const b  = calcBurstiness(subset);
+    const a  = calcAIPhrases(subset).score;
+    const f  = calcFormalityShift(subset);
+    const tr = calcTransitions(subset);
+    const vc = calcVocabClustering(subset);
+    const avg = Math.round((b + a + f + tr + vc) / 5);
     sampleResults.push({ score: avg, startPct });
   }
 
@@ -1501,8 +1501,8 @@ function runMonteCarloAnalysis(text) {
 
   let classification;
   if (mixed)                                 classification = 'MIXED ORIGIN';
-  else if (consistency >= 75 && mean >= 65)  classification = 'CONSISTENTLY AI';
-  else if (consistency >= 75 && mean <= 40)  classification = 'CONSISTENTLY HUMAN';
+  else if (consistency >= 75 && mean >= 50)  classification = 'CONSISTENTLY AI';
+  else if (consistency >= 75 && mean <= 38)  classification = 'CONSISTENTLY HUMAN';
   else                                       classification = 'INCONCLUSIVE';
 
   // Positional heatmap: 10 buckets spanning 0–100% of the document
