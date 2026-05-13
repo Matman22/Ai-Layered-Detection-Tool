@@ -1281,6 +1281,25 @@ function getSentences(text) {
 }
 
 function getParagraphs(text) {
+  // Use real paragraph breaks if 3+ exist
+  const natural = text.split(/\n\s*\n/).filter(p => p.trim().length > 20);
+  if (natural.length >= 3) return natural;
+
+  // Fall back to virtual paragraphs: split sentences into thirds.
+  // Needed because most pasted text has no double-newlines, which would
+  // cause all paragraph-level signals to return neutral 50.
+  const sentences = getSentences(text).filter(s => s.trim().length > 10);
+  if (sentences.length < 6) return natural.length >= 2 ? natural : [text];
+  const third = Math.floor(sentences.length / 3);
+  return [
+    sentences.slice(0, third).join(' '),
+    sentences.slice(third, third * 2).join(' '),
+    sentences.slice(third * 2).join(' ')
+  ].filter(g => g.trim().length > 20);
+}
+
+// Only real paragraph breaks — for signals where virtual grouping would be misleading
+function getNaturalParagraphs(text) {
   return text.split(/\n\s*\n/).filter(p => p.trim().length > 20);
 }
 
@@ -1412,9 +1431,9 @@ function calcPunctuationVariance(text) {
   return Math.max(0, Math.min(100, 80 - (variance * 400)));
 }
 
-// 10. Paragraph length uniformity
+// 10. Paragraph length uniformity — only meaningful with real paragraph breaks
 function calcParagraphUniformity(text) {
-  const paras = getParagraphs(text);
+  const paras = getNaturalParagraphs(text);
   if (paras.length < 2) return 50;
   const lengths = paras.map(p => p.trim().split(/\s+/).length);
   const avg = lengths.reduce((a,b)=>a+b,0)/lengths.length;
