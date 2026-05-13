@@ -22,13 +22,26 @@ function getParagraphs(text) {
 function getNaturalParagraphs(text) { return text.split(/\n\s*\n/).filter(p => p.trim().length > 20); }
 
 // ─── L1 signals ───────────────────────────────────────────────────────────────
-const AI_PHRASES = ['in conclusion','it is worth noting','it is important to note','furthermore',
-  'moreover','in summary','to summarize','delve into','it is crucial','in the realm of',
-  'as we explore','it becomes evident','navigating','multifaceted','nuanced','at its core',
-  'it is essential','foster','leveraging','paradigm','tapestry','underscore','pivotal','utilize',
-  "in today's world",'in the context of','underpins','embodies','holistic','robust','streamline',
-  'synergy','it goes without saying','needless to say','when it comes to','let us','one can argue',
-  'it should be noted','in light of','it is clear that','first and foremost','last but not least'];
+const AI_PHRASES_T1 = [
+  'it is worth noting','it is important to note',"it's worth noting",
+  'it should be noted','it is important to understand','it is clear that',
+  'it becomes evident','it goes without saying','needless to say',
+  'delve into','delves into','multifaceted','at its core','in the realm of',
+  'as we explore','tapestry','underscore','pivotal','embodies','underpins',
+  'first and foremost','last but not least',"in today's world",
+  "in today's fast-paced","in today's ever-changing",'one can argue',
+  'it is crucial to note','it is essential to note',
+];
+const AI_PHRASES_T2 = [
+  'in conclusion','furthermore','moreover','in summary','to summarize',
+  'it is crucial','it is essential','in the context of','leveraging','foster',
+  'paradigm','robust','streamline','synergy','utilize','navigating',
+  'holistic','nuanced','in light of','when it comes to','let us',
+  'consequently','in addition','moving forward','going forward',
+  'best practices','game-changer','cutting-edge','proactive','actionable',
+  'impactful','transformative','stakeholders',
+];
+const AI_PHRASES = [...AI_PHRASES_T1, ...AI_PHRASES_T2];
 const HEDGE_WORDS = ['perhaps','possibly','might','may','could','seem','appears','generally',
   'typically','often','usually','tend to','suggest','indicate'];
 
@@ -51,9 +64,13 @@ function calcLexicalDiversity(text) {
   return Math.max(0, Math.min(100, 100-(new Set(words).size/words.length*130)));
 }
 function calcAIPhrases(text) {
-  const lower = text.toLowerCase(); let hits = 0;
-  AI_PHRASES.forEach(p => { if (lower.includes(p)) hits++; });
-  return Math.min(100, hits/(tokenize(text).length/100)*25);
+  const lower = text.toLowerCase();
+  const tier1 = AI_PHRASES_T1.filter(p => lower.includes(p)).length;
+  const tier2 = AI_PHRASES_T2.filter(p => lower.includes(p)).length;
+  const t1Score = tier1 === 0 ? 0 : Math.min(95, 58 + (tier1 - 1) * 12);
+  const t2Score = tier2 === 0 ? 0 : tier2 === 1 ? 15 : Math.min(55, 27 + (tier2 - 2) * 8);
+  const combo = tier1 >= 1 && tier2 >= 2 ? 12 : tier1 >= 1 && tier2 >= 1 ? 5 : 0;
+  return Math.min(100, t1Score + t2Score + combo);
 }
 function calcHedging(text) {
   const lower = text.toLowerCase(); const words = tokenize(text); let count = 0;

@@ -1364,17 +1364,29 @@ function calcDensityMelody(text) {
   return Math.round(cvScore * 0.45 + gapCVScore * 0.30 + hfScore * 0.25);
 }
 
-const AI_PHRASES = [
-  'in conclusion', 'it is worth noting', 'it is important to note', 'furthermore',
-  'moreover', 'in summary', 'to summarize', 'delve into', 'it is crucial',
-  'in the realm of', 'as we explore', 'it becomes evident', 'navigating',
-  'multifaceted', 'nuanced', 'at its core', 'it is essential', 'foster',
-  'leveraging', 'paradigm', 'tapestry', 'underscore', 'pivotal', 'utilize',
-  'in today\'s world', 'in the context of', 'underpins', 'embodies', 'holistic',
-  'robust', 'streamline', 'synergy', 'it goes without saying', 'needless to say',
-  'when it comes to', 'let us', 'one can argue', 'it should be noted',
-  'in light of', 'it is clear that', 'first and foremost', 'last but not least'
+// Tier 1: near-exclusive LLM fingerprints — even 1 hit is meaningful evidence
+const AI_PHRASES_T1 = [
+  'it is worth noting', 'it is important to note', "it's worth noting",
+  'it should be noted', 'it is important to understand', 'it is clear that',
+  'it becomes evident', 'it goes without saying', 'needless to say',
+  'delve into', 'delves into', 'multifaceted', 'at its core', 'in the realm of',
+  'as we explore', 'tapestry', 'underscore', 'pivotal', 'embodies', 'underpins',
+  'first and foremost', 'last but not least', "in today's world",
+  "in today's fast-paced", "in today's ever-changing", 'one can argue',
+  'it is crucial to note', 'it is essential to note',
 ];
+// Tier 2: common in AI output but appear in careful human writing — need multiple hits
+const AI_PHRASES_T2 = [
+  'in conclusion', 'furthermore', 'moreover', 'in summary', 'to summarize',
+  'it is crucial', 'it is essential', 'in the context of', 'leveraging', 'foster',
+  'paradigm', 'robust', 'streamline', 'synergy', 'utilize', 'navigating',
+  'holistic', 'nuanced', 'in light of', 'when it comes to', 'let us',
+  'consequently', 'in addition', 'moving forward', 'going forward',
+  'best practices', 'game-changer', 'cutting-edge', 'proactive', 'actionable',
+  'impactful', 'transformative', 'stakeholders',
+];
+// Combined for backwards-compat references elsewhere
+const AI_PHRASES = [...AI_PHRASES_T1, ...AI_PHRASES_T2];
 
 const HEDGE_WORDS = ['perhaps', 'possibly', 'might', 'may', 'could', 'seem', 'appears',
   'generally', 'typically', 'often', 'usually', 'tend to', 'suggest', 'indicate'];
@@ -1449,20 +1461,24 @@ function calcLexicalDiversity(text) {
   return Math.max(0, aiScore);
 }
 
-// 4. AI phrase fingerprinting
+// 4. AI phrase fingerprinting — tiered scoring
+// Tier 1 phrases (near-certain LLM tells): first hit scores above neutral.
+// Tier 2 phrases (common AI filler): need multiple hits to contribute.
+// Non-linear with combo bonus for co-occurrence of both tiers.
 function calcAIPhrases(text) {
   const lower = text.toLowerCase();
-  let hits = 0;
   const found = [];
-  AI_PHRASES.forEach(phrase => {
-    if (lower.includes(phrase)) {
-      hits++;
-      found.push(phrase);
-    }
-  });
-  const words = tokenize(text).length;
-  const density = hits / (words / 100);
-  const score = Math.min(100, density * 25);
+  AI_PHRASES_T1.forEach(p => { if (lower.includes(p)) found.push(p); });
+  AI_PHRASES_T2.forEach(p => { if (lower.includes(p)) found.push(p); });
+  const tier1 = AI_PHRASES_T1.filter(p => lower.includes(p)).length;
+  const tier2 = AI_PHRASES_T2.filter(p => lower.includes(p)).length;
+  // Tier 1: 1 hit → 58 (above neutral), each extra +12, cap at 95
+  const t1Score = tier1 === 0 ? 0 : Math.min(95, 58 + (tier1 - 1) * 12);
+  // Tier 2: 1 hit → 15, 2 → 27, 3+ → 35 + 8 each, cap at 55
+  const t2Score = tier2 === 0 ? 0 : tier2 === 1 ? 15 : Math.min(55, 27 + (tier2 - 2) * 8);
+  // Combo bonus for finding both tiers together
+  const combo = tier1 >= 1 && tier2 >= 2 ? 12 : tier1 >= 1 && tier2 >= 1 ? 5 : 0;
+  const score = Math.min(100, t1Score + t2Score + combo);
   return { score, found };
 }
 
