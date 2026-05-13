@@ -2095,7 +2095,7 @@ async function runAnalysis() {
   // pattern-based signals (AI phrases, n-gram) which miss modern AI.
   // Total = 1.0 across 16 checks
   const weights = [
-    0.04, // perplexity         — unreliable proxy, reduced
+    0.02, // perplexity         — unreliable proxy, reduced
     0.12, // burstiness         — most reliable structural signal
     0.08, // lexical diversity
     0.07, // AI phrases         — misses modern AI, reduced
@@ -2106,7 +2106,7 @@ async function runAnalysis() {
     0.10, // punctuation variance  — reliable uniformity signal
     0.10, // paragraph uniformity  — reliable uniformity signal
     0.04, // rare words
-    0.08, // register stability    — reliable, increased
+    0.10, // register stability    — reliable, increased
     0.05, // n-gram repetition  — unreliable on short text, reduced
     0.05, // sentence opener diversity — unreliable, reduced
     0.07, // punctuation fingerprint
