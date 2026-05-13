@@ -152,6 +152,82 @@ function calcVocabClustering(text) {
   return Math.max(0, Math.min(100, 85-(cv*75)));
 }
 
+// 17. Density Melody — flat information-weight curve across the doc = AI signal
+const DENSITY_STOPWORDS = new Set([
+  'the','a','an','is','are','was','were','be','been','being','am',
+  'have','has','had','do','does','did','will','would','could','should',
+  'may','might','shall','can','cannot','need','used','let',
+  'to','of','in','for','on','with','at','by','from','up','out','off',
+  'into','through','during','before','after','above','below','between',
+  'about','against','along','around','behind','beside','beyond','despite',
+  'except','inside','near','outside','since','toward','under','until',
+  'upon','within','without','over','down','back','away','here','there',
+  'again','then','once','now','ago','also','even','still','just','very',
+  'too','quite','rather','almost','already','always','never','often',
+  'usually','sometimes','finally','however','therefore','although',
+  'because','unless','whether','though','while','when','where','why','how',
+  'all','both','each','few','more','most','other','some','such','many','much',
+  'no','nor','not','only','same','so','than','as','if','or','and','but','yet',
+  'either','neither','that','this','these','those','it','its','itself',
+  'he','she','they','we','you','i','me','him','her','them','us',
+  'my','your','his','their','our','whose','what','which','who','whom','any',
+  'said','says','say','get','got','go','went','come','came','see','saw',
+  'know','knew','think','thought','make','made','take','took','give','gave',
+  'look','looked','seem','seemed','become','became','want','wanted','use',
+  'find','found','tell','told','ask','asked','work','worked','call','called',
+  'try','tried','feel','felt','leave','left','keep','kept','put','set',
+  'turn','turned','show','showed','run','ran','move','moved','live','lived',
+  'stand','stood','lose','lost','pay','paid','meet','met','sit','sat',
+  'also','well','just','like','new','good','old','great','long','little',
+  'own','right','big','high','small','large','next','early','young',
+  'last','many','part','place','case','week','number','night','point',
+  'area','money','fact','month','lot','side','kind','head','house',
+  'friend','power','hour','game','line','end','among','name','land',
+  'people','world','life','child','day','year','man','woman','way','time',
+  'thing','two','three','four','five','six','seven','eight','nine','ten',
+]);
+function densityWordWeight(w) {
+  if (DENSITY_STOPWORDS.has(w)) return 0.05;
+  const l = w.length;
+  if (l <= 3) return 0.15;
+  if (l <= 6) return 0.40;
+  if (l <= 9) return 0.72;
+  return 1.0;
+}
+function calcDensityMelody(text) {
+  const words = text.toLowerCase().match(/\b[a-z]+\b/g) || [];
+  if (words.length < 80) return 50;
+  const wts = words.map(densityWordWeight);
+  const W = 25;
+  if (words.length < W * 2) return 50;
+  const curve = [];
+  for (let i = 0; i <= wts.length - W; i++) {
+    let s = 0; for (let k = 0; k < W; k++) s += wts[i+k]; curve.push(s/W);
+  }
+  const n = curve.length;
+  const mean = curve.reduce((a,b)=>a+b,0)/n;
+  const variance = curve.reduce((a,b)=>a+(b-mean)**2,0)/n;
+  const cv = mean > 0.01 ? Math.sqrt(variance)/mean : 0;
+  if (mean < 0.32) return 50; // casual text — signal not applicable
+  const highPos = wts.map((w,i)=>({w,i})).filter(({w})=>w>=0.7).map(({i})=>i);
+  let gapCV = 0;
+  if (highPos.length >= 5) {
+    const gaps = []; for (let i=1;i<highPos.length;i++) gaps.push(highPos[i]-highPos[i-1]);
+    const gm=gaps.reduce((a,b)=>a+b,0)/gaps.length;
+    const gv=gaps.reduce((a,b)=>a+(b-gm)**2,0)/gaps.length;
+    gapCV = gm>0 ? Math.sqrt(gv)/gm : 0;
+  }
+  const smooth = curve.map((_,i)=>{
+    const lo=Math.max(0,i-2),hi=Math.min(n-1,i+2);
+    let s=0,cnt=0; for(let k=lo;k<=hi;k++){s+=curve[k];cnt++;} return s/cnt;
+  });
+  const hfEnergy = curve.reduce((s,v,i)=>s+Math.abs(v-smooth[i]),0)/n;
+  const cvScore    = Math.max(0,Math.min(100,Math.round(100-(cv-0.10)/0.24*100)));
+  const gapCVScore = gapCV>0 ? Math.max(0,Math.min(100,Math.round(100-(gapCV-0.40)/1.0*100))) : 50;
+  const hfScore    = Math.max(0,Math.min(100,Math.round(100-(hfEnergy-0.010)/0.040*100)));
+  return Math.round(cvScore*0.45+gapCVScore*0.30+hfScore*0.25);
+}
+
 // ─── L5 signals ───────────────────────────────────────────────────────────────
 function calcContractionConsistency(text) {
   const paragraphs = getParagraphs(text); if (paragraphs.length < 3) return 50;
@@ -195,10 +271,10 @@ function calcParagraphOpenerConsistency(text) {
 }
 
 // ─── Scoring ──────────────────────────────────────────────────────────────────
-const WEIGHTS = [0.02,0.12,0.08,0.07,0.02,0.02,0.06,0.04,0.10,0.10,0.04,0.10,0.05,0.05,0.07,0.06];
+const WEIGHTS = [0.01,0.12,0.08,0.07,0.01,0.01,0.06,0.02,0.10,0.10,0.02,0.10,0.05,0.05,0.07,0.06,0.07];
 const NAMES   = ['Perplexity','Burstiness','Lexical diversity','AI phrases','Hedging','Passive voice',
   'Transitions','Clause depth','Punct variance','Para uniformity','Rare words','Register stability',
-  'N-gram repeat','Opener diversity','Punct fingerprint','Vocab clustering'];
+  'N-gram repeat','Opener diversity','Punct fingerprint','Vocab clustering','Density melody'];
 
 function runDetection(text) {
   const wordCount = tokenize(text).length;
@@ -206,7 +282,7 @@ function runDetection(text) {
   const raw = [calcPerplexity,calcBurstiness,calcLexicalDiversity,calcAIPhrases,calcHedging,
     calcPassiveVoice,calcTransitions,calcClauseDepth,calcPunctuationVariance,calcParagraphUniformity,
     calcRareWords,calcFormalityShift,calcNgramRepetition,calcSentenceOpenerDiversity,
-    calcPunctuationFingerprint,calcVocabClustering].map(fn => {
+    calcPunctuationFingerprint,calcVocabClustering,calcDensityMelody].map(fn => {
       const result = fn(text); return typeof result === 'object' ? result.score : result;
     });
   // Evidence accumulation: only signals above neutral (50) contribute.

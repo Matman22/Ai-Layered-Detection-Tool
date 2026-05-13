@@ -1257,6 +1257,113 @@ textarea.addEventListener('input', () => {
   document.getElementById('wordCount').textContent = `${words} words`;
 });
 
+// ─── Density Melody: word frequency tier lookup ──────────────────────────────
+// Top ~250 function words and ultra-common content words get near-zero weight.
+// Everything else is scored by word length as a proxy for information density.
+const DENSITY_STOPWORDS = new Set([
+  'the','a','an','is','are','was','were','be','been','being','am',
+  'have','has','had','do','does','did','will','would','could','should',
+  'may','might','shall','can','cannot','need','used','let',
+  'to','of','in','for','on','with','at','by','from','up','out','off',
+  'into','through','during','before','after','above','below','between',
+  'about','against','along','around','behind','beside','beyond','despite',
+  'except','inside','near','outside','since','toward','under','until',
+  'upon','within','without','over','down','back','away','here','there',
+  'again','then','once','now','ago','also','even','still','just','very',
+  'too','quite','rather','almost','already','always','never','often',
+  'usually','sometimes','finally','however','therefore','although',
+  'because','unless','whether','though','while','when','where','why','how',
+  'all','both','each','few','more','most','other','some','such','many','much',
+  'no','nor','not','only','same','so','than','as','if','or','and','but','yet',
+  'either','neither','that','this','these','those','it','its','itself',
+  'he','she','they','we','you','i','me','him','her','them','us',
+  'my','your','his','their','our','whose','what','which','who','whom','any',
+  'said','says','say','get','got','go','went','come','came','see','saw',
+  'know','knew','think','thought','make','made','take','took','give','gave',
+  'look','looked','seem','seemed','become','became','want','wanted','use',
+  'find','found','tell','told','ask','asked','work','worked','call','called',
+  'try','tried','feel','felt','leave','left','keep','kept','put','set',
+  'turn','turned','show','showed','run','ran','move','moved','live','lived',
+  'stand','stood','lose','lost','pay','paid','meet','met','sit','sat',
+  'also','well','just','like','new','good','old','great','long','little',
+  'own','right','big','high','small','large','next','early','young',
+  'last','many','part','place','case','week','number','night','point',
+  'area','money','fact','month','lot','side','kind','head','house',
+  'friend','power','hour','game','line','end','among','name','land',
+  'people','world','life','child','day','year','man','woman','way','time',
+  'thing','two','three','four','five','six','seven','eight','nine','ten',
+]);
+
+function densityWordWeight(word) {
+  const w = word.toLowerCase();
+  if (DENSITY_STOPWORDS.has(w)) return 0.05;
+  const len = w.length;
+  if (len <= 3)  return 0.15;
+  if (len <= 6)  return 0.40;
+  if (len <= 9)  return 0.72;
+  return 1.0;
+}
+
+function calcDensityMelody(text) {
+  const words = text.toLowerCase().match(/\b[a-z]+\b/g) || [];
+  if (words.length < 80) return 50;
+
+  const weights = words.map(densityWordWeight);
+  const windowSize = 25;
+  if (words.length < windowSize * 2) return 50;
+
+  // Build rolling density curve
+  const curve = [];
+  for (let i = 0; i <= weights.length - windowSize; i++) {
+    let sum = 0;
+    for (let k = 0; k < windowSize; k++) sum += weights[i + k];
+    curve.push(sum / windowSize);
+  }
+
+  const n = curve.length;
+  const mean = curve.reduce((a, b) => a + b, 0) / n;
+  const variance = curve.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+  const cv = mean > 0.01 ? Math.sqrt(variance) / mean : 0;
+
+  // Gate: only meaningful for formal/content-rich text.
+  // Casual human writing uses short common words uniformly — its curve is also
+  // flat, but for a different reason. We only fire when vocabulary is formal enough
+  // that "flatness" is meaningful evidence of AI generation.
+  if (mean < 0.32) return 50;
+
+  // Gap CV: how regularly are high-information words spaced?
+  // AI: evenly distributed domain vocabulary → regular gaps → low gapCV
+  // Human: high-weight words burst at argument peaks → irregular gaps → high gapCV
+  const highPos = weights.map((w, i) => ({ w, i })).filter(({ w }) => w >= 0.7).map(({ i }) => i);
+  let gapCV = 0;
+  if (highPos.length >= 5) {
+    const gaps = [];
+    for (let i = 1; i < highPos.length; i++) gaps.push(highPos[i] - highPos[i - 1]);
+    const gm = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    const gv = gaps.reduce((a, b) => a + (b - gm) ** 2, 0) / gaps.length;
+    gapCV = gm > 0 ? Math.sqrt(gv) / gm : 0;
+  }
+
+  // High-frequency energy: deviation of curve from its own 5-point smoothed version.
+  // AI flat curve → small deviation (low HF energy)
+  // Human spiky curve → larger deviation (higher HF energy)
+  const smooth = curve.map((_, i) => {
+    const lo = Math.max(0, i - 2), hi = Math.min(n - 1, i + 2);
+    let s = 0, cnt = 0;
+    for (let k = lo; k <= hi; k++) { s += curve[k]; cnt++; }
+    return s / cnt;
+  });
+  const hfEnergy = curve.reduce((sum, v, i) => sum + Math.abs(v - smooth[i]), 0) / n;
+
+  // Score: high = AI (flat melody), low = human (irregular melody)
+  // Calibrated thresholds from test data: AI CV ~0.135-0.145, formal human CV ~0.20+
+  const cvScore    = Math.max(0, Math.min(100, Math.round(100 - (cv - 0.10) / 0.24 * 100)));
+  const gapCVScore = gapCV > 0 ? Math.max(0, Math.min(100, Math.round(100 - (gapCV - 0.40) / 1.0 * 100))) : 50;
+  const hfScore    = Math.max(0, Math.min(100, Math.round(100 - (hfEnergy - 0.010) / 0.040 * 100)));
+
+  return Math.round(cvScore * 0.45 + gapCVScore * 0.30 + hfScore * 0.25);
+}
+
 const AI_PHRASES = [
   'in conclusion', 'it is worth noting', 'it is important to note', 'furthermore',
   'moreover', 'in summary', 'to summarize', 'delve into', 'it is crucial',
@@ -2108,6 +2215,7 @@ async function runAnalysis() {
   const openerDiv = calcSentenceOpenerDiversity(text);
   const punctFinger = calcPunctuationFingerprint(text);
   const vocabCluster = calcVocabClustering(text);
+  const densityMelody = calcDensityMelody(text);
 
   // Run forensic layer
   const forensic = runForensicAnalysis(text);
@@ -2117,28 +2225,29 @@ async function runAnalysis() {
 
   // Weights favour uniformity-based signals (reliable on any AI text) over
   // pattern-based signals (AI phrases, n-gram) which miss modern AI.
-  // Total = 1.0 across 16 checks
+  // Total = 1.0 across 17 checks
   const weights = [
-    0.02, // perplexity         — unreliable proxy, reduced
+    0.01, // perplexity         — unreliable proxy, reduced
     0.12, // burstiness         — most reliable structural signal
     0.08, // lexical diversity
     0.07, // AI phrases         — misses modern AI, reduced
-    0.02, // hedging            — rarely decisive
-    0.02, // passive voice      — rarely decisive
+    0.01, // hedging            — rarely decisive
+    0.01, // passive voice      — rarely decisive
     0.06, // transitions
-    0.04, // clause depth
+    0.02, // clause depth
     0.10, // punctuation variance  — reliable uniformity signal
     0.10, // paragraph uniformity  — reliable uniformity signal
-    0.04, // rare words
-    0.10, // register stability    — reliable, increased
-    0.05, // n-gram repetition  — unreliable on short text, reduced
-    0.05, // sentence opener diversity — unreliable, reduced
+    0.02, // rare words
+    0.10, // register stability    — reliable
+    0.05, // n-gram repetition
+    0.05, // sentence opener diversity
     0.07, // punctuation fingerprint
     0.06, // vocab clustering
+    0.07, // density melody     — flat information curve = AI formal text
   ];
   const scores = [perplexity, burstiness, lexical, aiPhrases, hedging, passive, transitions,
     clauseDepth, punctuation, paraUniformity, rareWords, formality,
-    ngramRep, openerDiv, punctFinger, vocabCluster];
+    ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody];
   // Evidence accumulation: only signals above neutral (50) contribute.
   // Absence of an AI pattern is neutral evidence, not human evidence.
   const evidence = scores.reduce((sum, s, i) => sum + Math.max(0, s - 50) * weights[i], 0);
@@ -2254,6 +2363,7 @@ async function runAnalysis() {
     { name: 'Opener Diversity', value: openerDiv, desc: 'AI starts sentences with structurally similar patterns repeatedly.', unit: '%' },
     { name: 'Punctuation Fingerprint', value: punctFinger, desc: 'Em-dash overuse and parenthetical uniformity — classic AI stylistic habits.', unit: '%' },
     { name: 'Vocab Clustering', value: vocabCluster, desc: 'AI spreads domain terms evenly. Humans cluster them around key points.', unit: '%' },
+    { name: 'Density Melody', value: densityMelody, desc: 'AI distributes information weight uniformly across a document. Human writing spikes at core arguments and flattens at transitions.', unit: '%' },
   ];
 
   const grid = document.getElementById('metricsGrid');
@@ -2282,6 +2392,7 @@ async function runAnalysis() {
   if (openerDiv > 60) signals.push({ icon: '🔴', title: 'Sentence openers are structurally repetitive', detail: 'Multiple sentences begin with the same word patterns — a strong AI tell.' });
   if (punctFinger > 50) signals.push({ icon: '🟠', title: 'AI punctuation fingerprint', detail: 'Em-dash overuse or parenthetical uniformity detected — hallmark AI stylistic habits.' });
   if (vocabCluster > 65) signals.push({ icon: '🟠', title: 'Domain terms distributed too evenly', detail: 'Key vocabulary is spread uniformly — AI distributes terms; humans cluster them.' });
+  if (densityMelody > 65) signals.push({ icon: '🟠', title: 'Flat information density melody', detail: 'Formal vocabulary is distributed uniformly throughout — AI maintains even information density without argument-driven peaks.' });
   if (perplexity > 65) signals.push({ icon: '🟠', title: 'Predictable word choices', detail: 'Vocabulary shows low entropy — words are highly predictable in sequence.' });
   if (paraUniformity > 65) signals.push({ icon: '🟠', title: 'Paragraph length uniformity', detail: 'Paragraphs are suspiciously similar in length — AI tends to pad evenly.' });
   if (transitions > 55) signals.push({ icon: '🟠', title: 'Over-structured transitions', detail: 'Heavy use of linking language suggests structured generation.' });
@@ -2325,8 +2436,9 @@ async function runAnalysis() {
     { t: '00:14', m: `[v2] Sentence opener diversity: ${Math.round(openerDiv)}%`, cls: openerDiv > 60 ? 'warn' : '' },
     { t: '00:15', m: `[v2] Punctuation fingerprint: ${Math.round(punctFinger)}% — em-dash & parenthetical analysis`, cls: punctFinger > 50 ? 'warn' : '' },
     { t: '00:16', m: `[v2] Vocabulary clustering: ${Math.round(vocabCluster)}% — domain term distribution mapped`, cls: vocabCluster > 65 ? 'warn' : '' },
-    { t: '00:17', m: `Rebalanced composite computed across 16 vectors`, cls: 'highlight' },
-    { t: '00:18', m: `[ L2 ] Invisible char scan: ${forensic.invisible.reduce((a,c)=>a+c.count,0)} chars found across ${forensic.invisible.length} Unicode type(s)`, cls: forensic.invisible.length > 0 ? 'warn' : '' },
+    { t: '00:17', m: `[v2] Density melody: ${Math.round(densityMelody)}% — information density curve${densityMelody === 50 ? ' (casual text — neutral)' : densityMelody > 65 ? ' FLAT — uniform formal distribution' : ' irregular — argument-driven peaks detected'}`, cls: densityMelody > 65 ? 'warn' : densityMelody === 50 ? '' : 'highlight' },
+    { t: '00:18', m: `Rebalanced composite computed across 17 vectors`, cls: 'highlight' },
+    { t: '00:19', m: `[ L2 ] Invisible char scan: ${forensic.invisible.reduce((a,c)=>a+c.count,0)} chars found across ${forensic.invisible.length} Unicode type(s)`, cls: forensic.invisible.length > 0 ? 'warn' : '' },
     { t: '00:19', m: `[ L2 ] Homoglyph scan: ${forensic.homoglyphs.reduce((a,c)=>a+c.count,0)} substitution(s) across ${forensic.homoglyphs.length} script type(s)`, cls: forensic.homoglyphs.length > 0 ? 'warn' : '' },
     { t: '00:20', m: `[ L2 ] Quote encoding: ${forensic.quotes.mixed ? 'MIXED smart+straight — copy-paste artifact' : forensic.quotes.hasSmart ? 'Smart quotes only' : 'Straight quotes only'}`, cls: forensic.quotes.mixed ? 'warn' : '' },
     { t: '00:21', m: `[ L2 ] Non-standard spaces: ${forensic.spaces.total} (NBSP:${forensic.spaces.nbsp} narrow:${forensic.spaces.narrowNbsp} em:${forensic.spaces.emSpace})`, cls: forensic.spaces.total > 3 ? 'warn' : '' },
