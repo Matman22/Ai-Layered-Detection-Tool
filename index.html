@@ -2091,23 +2091,24 @@ async function runAnalysis() {
   // Run authorial consistency layer
   const layer5 = runAuthoralConsistency(text);
 
-  // Rebalanced weights — reduced burstiness/formality reliance, added 4 new vectors
+  // Weights favour uniformity-based signals (reliable on any AI text) over
+  // pattern-based signals (AI phrases, n-gram) which miss modern AI.
   // Total = 1.0 across 16 checks
   const weights = [
-    0.08, // perplexity
-    0.08, // burstiness (reduced — too gameable)
+    0.04, // perplexity         — unreliable proxy, reduced
+    0.12, // burstiness         — most reliable structural signal
     0.08, // lexical diversity
-    0.12, // AI phrases
-    0.04, // hedging
-    0.04, // passive voice
+    0.07, // AI phrases         — misses modern AI, reduced
+    0.02, // hedging            — rarely decisive
+    0.02, // passive voice      — rarely decisive
     0.06, // transitions
     0.04, // clause depth
-    0.05, // punctuation variance
-    0.05, // paragraph uniformity
+    0.10, // punctuation variance  — reliable uniformity signal
+    0.10, // paragraph uniformity  — reliable uniformity signal
     0.04, // rare words
-    0.04, // formality (reduced — too gameable)
-    0.08, // n-gram repetition
-    0.07, // sentence opener diversity
+    0.08, // register stability    — reliable, increased
+    0.05, // n-gram repetition  — unreliable on short text, reduced
+    0.05, // sentence opener diversity — unreliable, reduced
     0.07, // punctuation fingerprint
     0.06, // vocab clustering
   ];
@@ -2154,7 +2155,7 @@ async function runAnalysis() {
     iconStr = '🤖';
     titleStr = 'Likely AI-Generated';
     subStr = `${trueCombined}% combined confidence across all layers. Strong AI signals detected in linguistic patterns${forensic.score >= 20 ? ', forensic character encoding' : ''}${fileMetadata && metaAnalysis.metaAiScore >= 20 ? ', and file metadata' : ''}. High regularity in sentence rhythm, phrase patterns, and stylistic register indicate machine authorship.`;
-  } else if (trueCombined >= 42) {
+  } else if (trueCombined >= 35) {
     cls = 'mixed';
     iconStr = '⚠️';
     titleStr = 'Ambiguous / Mixed Origin';
@@ -2179,7 +2180,7 @@ async function runAnalysis() {
   dualEl.innerHTML = `
     <div class="score-panel">
       <div class="score-panel-label">// Layer 1 — Linguistic</div>
-      <div class="score-panel-num" style="color:${aiScore >= 68 ? 'var(--accent2)' : aiScore >= 42 ? 'var(--warn)' : 'var(--accent)'}">${aiScore}%</div>
+      <div class="score-panel-num" style="color:${aiScore >= 68 ? 'var(--accent2)' : aiScore >= 35 ? 'var(--warn)' : 'var(--accent)'}">${aiScore}%</div>
       <div class="score-panel-sub">16 linguistic vectors</div>
     </div>
     <div class="score-panel">
@@ -2300,7 +2301,7 @@ async function runAnalysis() {
     { t: '00:28', m: `[ L5 ] Para opener consistency: ${Math.round(layer5.signals.openers)}%`, cls: layer5.signals.openers > 60 ? 'warn' : '' },
     { t: '00:29', m: `[ L5 ] Authorial consistency score: ${layer5.score}%`, cls: layer5.score >= 60 ? 'warn' : layer5.score < 25 ? 'highlight' : '' },
     { t: '00:30', m: `[ L3 ] Metadata score: ${fileMetadata ? metaAnalysis.metaAiScore + '%' : 'N/A — no file loaded'}`, cls: fileMetadata && metaAnalysis.metaAiScore >= 40 ? 'warn' : '' },
-    { t: '00:31', m: `FINAL COMBINED SCORE: ${trueCombined}% — Verdict: ${titleStr.toUpperCase()}`, cls: trueCombined >= 68 ? 'warn' : trueCombined >= 42 ? '' : 'highlight' },
+    { t: '00:31', m: `FINAL COMBINED SCORE: ${trueCombined}% — Verdict: ${titleStr.toUpperCase()}`, cls: trueCombined >= 68 ? 'warn' : trueCombined >= 35 ? '' : 'highlight' },
   ];
 
   document.getElementById('logBox').innerHTML = logLines.map(l => `
