@@ -1621,32 +1621,36 @@ function calcPerplexityProxy2(text) {
   return { score, dataPoints: sentences.length, confidence };
 }
 
-// Proxy 3 — character trigram Shannon entropy
-// AI text has slightly lower character-level entropy even when word lengths look normal.
+// Proxy 3 — sentence-length Shannon entropy
+// AI prose clusters sentence lengths into a narrow band (low entropy).
+// Human writing spreads more evenly across short/medium/long sentences (high entropy).
+// Bucket lengths into 5 bins; compute distribution entropy. Low entropy → AI signal.
 function calcPerplexityProxy3(text) {
-  if (text.length < 200) return { score: 50, confidence: 0, dataPoints: 0, entropy: 0 };
-  const chars = text.replace(/\s+/g, '');
-  if (chars.length < 3) return { score: 50, confidence: 0, dataPoints: 0, entropy: 0 };
+  const sentences = getSentences(text);
+  if (sentences.length < 5) return { score: 50, confidence: 0, dataPoints: sentences.length, entropy: 0 };
 
-  const counts = {};
-  let total = 0;
-  for (let i = 0; i < chars.length - 2; i++) {
-    const tri = chars.slice(i, i + 3);
-    counts[tri] = (counts[tri] || 0) + 1;
-    total++;
-  }
+  const lengths = sentences.map(s => (s.trim().match(/\b\w+\b/g) || []).length);
 
+  // 5 bins: 1–7, 8–12, 13–18, 19–25, 26+
+  const bins = [0, 0, 0, 0, 0];
+  lengths.forEach(l => {
+    if      (l <= 7)  bins[0]++;
+    else if (l <= 12) bins[1]++;
+    else if (l <= 18) bins[2]++;
+    else if (l <= 25) bins[3]++;
+    else              bins[4]++;
+  });
+
+  const total = lengths.length;
   let entropy = 0;
-  for (const c of Object.values(counts)) {
-    const p = c / total;
-    entropy -= p * Math.log2(p);
-  }
+  bins.forEach(b => { if (b > 0) { const p = b / total; entropy -= p * Math.log2(p); } });
 
-  // Human range 3.5–5.5 bits, AI range 3.8–5.0 bits (lower = more predictable = AI)
-  const normalizedEntropy = (entropy - 3.5) / 2.0;
-  const score = Math.max(0, Math.min(100, Math.round(100 - (normalizedEntropy * 90))));
-  const confidence = Math.min(total / 500, 1.0);
-  return { score, dataPoints: Object.keys(counts).length, confidence, entropy };
+  // max possible = log2(5) ≈ 2.322 bits (perfectly uniform across all 5 bins)
+  // low entropy = sentences cluster in one length band = AI signal
+  const maxEntropy = Math.log2(5);
+  const score = Math.max(0, Math.min(100, Math.round(100 - (entropy / maxEntropy) * 90)));
+  const confidence = Math.min(total / 10, 1.0);
+  return { score, dataPoints: total, confidence, entropy };
 }
 
 // Ensemble: confidence-weighted average of all three perplexity proxies.
@@ -1654,7 +1658,9 @@ function calcPerplexityProxy3(text) {
 function calcPerplexity(text) {
   const wordCount = tokenize(text).length;
   const p1Raw = calcPerplexityProxy1(text);
-  const p1 = { score: p1Raw, confidence: 1.0, dataPoints: wordCount };
+  // P1 always returns ~0% on formal prose (high word-length variance in all English text).
+  // Excluded from the weighted ensemble; kept for display only.
+  const p1 = { score: p1Raw, confidence: 0, dataPoints: wordCount };
   const p2 = calcPerplexityProxy2(text);
   const p3 = calcPerplexityProxy3(text);
 
@@ -1666,7 +1672,7 @@ function calcPerplexity(text) {
       proxies: {
         wordLengthVariance: { score: p1.score, confidence: p1.confidence },
         syllableVariance:   { score: p2.score, confidence: p2.confidence },
-        trigramEntropy:     { score: p3.score, confidence: p3.confidence },
+        sentenceLengthEntropy: { score: p3.score, confidence: p3.confidence },
       },
     };
   }
@@ -2708,7 +2714,7 @@ async function runAnalysis() {
   const metrics = [
     { name: 'Sentence Burstiness', value: burstiness, desc: 'Variance in sentence length. AI text is flat; humans burst.', unit: '%' },
     { name: 'AI Phrase Density', value: aiPhrases, desc: `Found ${phrasesFound.length} known AI phrases: ${phrasesFound.slice(0,3).join(', ')}${phrasesFound.length > 3 ? '...' : ''}`, unit: '%' },
-    { name: 'Perplexity Score', value: perplexity.score, desc: `3-proxy ensemble: word-length variance · syllable density · character trigram entropy · ${perplexity.validProxyCount}/3 active · agreement ${perplexity.agreement}%`, unit: '%' },
+    { name: 'Perplexity Score', value: perplexity.score, desc: `2-proxy ensemble: syllable density · sentence-length entropy · ${perplexity.validProxyCount}/2 active · agreement ${perplexity.agreement}%`, unit: '%' },
     { name: 'Lexical Diversity', value: lexical, desc: 'Unique word ratio. AI repeats vocabulary more.', unit: '%' },
     { name: 'Transition Uniformity', value: transitions, desc: 'Density of linking phrases. AI overuses them structurally.', unit: '%' },
     { name: 'Register Stability', value: formality, desc: 'How fixed the formality level is. Humans shift register.', unit: '%' },
@@ -2779,7 +2785,7 @@ async function runAnalysis() {
   // Log
   const logLines = [
     { t: '00:00', m: `Document loaded — ${text.split(/\s+/).length} words, ${getSentences(text).length} sentences, ${getParagraphs(text).length} paragraphs`, cls: 'highlight' },
-    { t: '00:01', m: `Perplexity ensemble: word-length ${perplexity.proxies.wordLengthVariance?.score ?? 'n/a'}% · syllable ${perplexity.proxies.syllableVariance?.score ?? 'n/a'}% · trigram-entropy ${perplexity.proxies.trigramEntropy?.score ?? 'n/a'}% (entropy: ${(perplexity.entropy ?? 0).toFixed(2)}bits) → weighted ${perplexity.score}% · agreement ${perplexity.agreement}% · ${perplexity.validProxyCount}/3 proxies active`, cls: perplexity.score > 65 ? 'warn' : '' },
+    { t: '00:01', m: `Perplexity ensemble: syllable-variance ${perplexity.proxies.syllableVariance?.score ?? 'n/a'}% · sent-length-entropy ${perplexity.proxies.sentenceLengthEntropy?.score ?? 'n/a'}% (${(perplexity.entropy ?? 0).toFixed(2)}b / max 2.32b) → weighted ${perplexity.score}% · agreement ${perplexity.agreement}% · ${perplexity.validProxyCount}/2 proxies active`, cls: perplexity.score > 65 ? 'warn' : '' },
     { t: '00:02', m: `Burstiness: ${Math.round(burstiness)}%`, cls: burstiness > 65 ? 'warn' : '' },
     { t: '00:03', m: `Lexical diversity (TTR): ${Math.round(lexical)}%` },
     { t: '00:04', m: `AI phrase scan: ${phrasesFound.length} phrases matched — ${phrasesFound.slice(0,4).join(', ')||'none'}`, cls: phrasesFound.length > 3 ? 'warn' : '' },
