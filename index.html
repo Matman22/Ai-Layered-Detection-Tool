@@ -2578,28 +2578,29 @@ async function runAnalysis() {
   // Run authorial consistency layer
   const layer5 = runAuthoralConsistency(text);
 
-  // Weights favour uniformity-based signals (reliable on any AI text) over
-  // pattern-based signals (AI phrases, n-gram) which miss modern AI.
-  // Total = 1.0 across 17 checks
+  // Weights tuned against RAID benchmark (liamdugan/raid, 500 samples).
+  // Diagnostics showed transitions inverted on MPT/Llama-chat; burstiness,
+  // paragraph uniformity, register stability, vocab clustering most reliable
+  // on harder model families. Total = 1.0 across 18 checks.
   const weights = [
-    0.01, // perplexity         — unreliable proxy, reduced
-    0.09, // burstiness         — most reliable structural signal (−0.03, partial overlap with MC)
-    0.08, // lexical diversity
-    0.07, // AI phrases         — misses modern AI, reduced
+    0.01, // perplexity         — unreliable proxy, low weight
+    0.11, // burstiness         — top structural signal, boosted (+0.02)
+    0.06, // lexical diversity  — FN scores near human baseline, reduced (−0.02)
+    0.07, // AI phrases         — misses modern AI but still useful
     0.01, // hedging            — rarely decisive
     0.01, // passive voice      — rarely decisive
-    0.06, // transitions
+    0.03, // transitions        — inverted on MPT/Llama-chat, reduced (−0.03)
     0.02, // clause depth
-    0.07, // punctuation variance  — reliable uniformity signal (−0.03, MC includes punctFinger)
-    0.10, // paragraph uniformity  — reliable uniformity signal
+    0.07, // punctuation variance  — reliable uniformity signal
+    0.12, // paragraph uniformity  — boosted, reliable across all model families (+0.02)
     0.02, // rare words
-    0.10, // register stability    — reliable
-    0.04, // n-gram repetition     (−0.01, MC includes ngramRep)
+    0.12, // register stability    — boosted, top signal across all model families (+0.02)
+    0.04, // n-gram repetition
     0.05, // sentence opener diversity
     0.07, // punctuation fingerprint
-    0.05, // vocab clustering      (−0.01, MC includes lexical)
+    0.07, // vocab clustering      — boosted, reliable on harder models (+0.02)
     0.07, // density melody     — flat information curve = AI formal text
-    0.08, // monte carlo        — sampling variance across random subsets
+    0.05, // monte carlo        — reduced to balance budget (−0.03)
   ];
   const scores = [perplexity.score, burstiness, lexical, aiPhrases, hedging, passive, transitions,
     clauseDepth, punctuation, paraUniformity, rareWords, formality,
