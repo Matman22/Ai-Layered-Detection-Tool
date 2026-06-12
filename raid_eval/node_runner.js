@@ -87,7 +87,7 @@ function scoreText(text) {
     0.01, // hedging
     0.01, // passive voice
     0.03, // transitions
-    0.02, // clause depth
+    0.03, // clause depth
     0.07, // punctuation variance
     0.12, // paragraph uniformity
     0.02, // rare words
@@ -97,7 +97,7 @@ function scoreText(text) {
     0.07, // punctuation fingerprint
     0.07, // vocab clustering
     0.07, // density melody
-    0.05, // monte carlo
+    0.04, // monte carlo
   ];
 
   const scores = [

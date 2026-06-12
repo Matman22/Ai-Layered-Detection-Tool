@@ -1889,10 +1889,10 @@ function calcNgramRepetition(text) {
 function calcSentenceOpenerDiversity(text) {
   const sentences = getSentences(text);
   if (sentences.length < 5) return 50;
-  // Extract first 2 words of each sentence
+  // Extract first word of each sentence (1-word gives better AI/human discrimination)
   const openers = sentences.map(s => {
     const words = s.trim().toLowerCase().match(/\b[a-z']+\b/g) || [];
-    return words.slice(0, 2).join(' ');
+    return words[0] || '';
   }).filter(o => o.length > 0);
   const unique = new Set(openers).size;
   const diversity = unique / openers.length;
@@ -2590,7 +2590,7 @@ async function runAnalysis() {
     0.01, // hedging            — rarely decisive
     0.01, // passive voice      — rarely decisive
     0.03, // transitions        — inverted on MPT/Llama-chat, reduced (−0.03)
-    0.02, // clause depth
+    0.03, // clause depth          — boosted (+0.01): fires on missed AI texts (FN avg 74.7 vs TP avg 41.7)
     0.07, // punctuation variance  — reliable uniformity signal
     0.12, // paragraph uniformity  — boosted, reliable across all model families (+0.02)
     0.02, // rare words
@@ -2600,7 +2600,7 @@ async function runAnalysis() {
     0.07, // punctuation fingerprint
     0.07, // vocab clustering      — boosted, reliable on harder models (+0.02)
     0.07, // density melody     — flat information curve = AI formal text
-    0.05, // monte carlo        — reduced to balance budget (−0.03)
+    0.04, // monte carlo        — reduced to balance budget (−0.04)
   ];
   const scores = [perplexity.score, burstiness, lexical, aiPhrases, hedging, passive, transitions,
     clauseDepth, punctuation, paraUniformity, rareWords, formality,

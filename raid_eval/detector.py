@@ -205,14 +205,25 @@ def calc_paragraph_uniformity(text: str) -> float:
     return max(0.0, min(100.0, 100 - cv * 70))
 
 
+RARE_WORDS_COMMON = {
+    'the','a','an','and','or','but','in','on','at','to','for','of','with',
+    'by','from','up','about','into','through','during','is','are','was','were',
+    'be','been','have','has','had','do','does','did','will','would','could',
+    'should','may','might','can','this','that','these','those','it','its',
+    'i','you','he','she','we','they','my','your','his','her','our','their',
+    'what','which','who','when','where','how','if','then','than','so','as',
+    'not','no','there','here','more','also','just','only','very','much',
+    'many','most','some','all','any','each','other','over',
+}
+
 def calc_rare_words(text: str) -> float:
     words = tokenize(text)
-    if not words:
-        return 0.0
-    long_words = [w for w in words if len(w) >= 9]
-    rate = len(long_words) / len(words)
-    # AI tends to use more rare/long words uniformly
-    return min(100.0, rate * 250)
+    content_words = [w for w in words if w not in RARE_WORDS_COMMON and len(w) > 3]
+    if len(content_words) < 10:
+        return 50.0
+    rare_ttr = len(set(content_words)) / len(content_words)
+    # Low content-word TTR = AI reuses the same vocabulary
+    return max(0.0, min(100.0, 85 - rare_ttr * 90))
 
 
 def calc_formality_shift(text: str) -> float:
