@@ -129,3 +129,26 @@ When starting a new Claude Code session:
 4. Make targeted edits — never rewrite large sections unnecessarily
 5. Test by opening index.html in browser after changes
 6. Commit with descriptive message when feature is complete
+
+## Coding Guidelines
+
+Four core principles for reducing common coding mistakes:
+
+**1. Think Before Coding**
+Don't assume. Don't hide confusion. Surface tradeoffs. Explicitly name
+uncertainties and present multiple interpretations when they exist before
+writing any code.
+
+**2. Simplicity First**
+Minimum code that solves the problem. Nothing speculative. Avoid unrequested
+features, unnecessary abstractions, or speculative error handling.
+
+**3. Surgical Changes**
+Every changed line should trace directly to the user's request. Don't improve
+unrelated code or refactor things that aren't broken — especially important
+in index.html which is 2800+ lines.
+
+**4. Goal-Driven Execution**
+Define measurable success criteria before implementation. Transform tasks into
+verifiable goals with clear verification steps (e.g. run evaluate.py and confirm
+F1 improves) before writing code.
