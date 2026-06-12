@@ -437,24 +437,24 @@ def calc_authorial_score(text: str) -> float:
 # ---------------------------------------------------------------------------
 
 WEIGHTS = [
-    0.01,  # perplexity proxy
-    0.11,  # burstiness            (+0.02 — top-5 failing, reliable on hard models)
-    0.06,  # lexical diversity     (-0.02 — FN scores near human baseline; signal fires but too weakly)
-    0.07,  # AI phrases
-    0.01,  # hedging
-    0.01,  # passive voice
-    0.03,  # transitions           (-0.03 — inverted on MPT/Llama-chat; actively hurts score)
-    0.02,  # clause depth (omitted, using punctuation variance as proxy)
-    0.07,  # punctuation variance
-    0.12,  # paragraph uniformity  (+0.02 — consistently separates TP from FN)
-    0.02,  # rare words
-    0.12,  # formality shift       (+0.02 — top reliable signal across all model families)
-    0.04,  # n-gram repetition
-    0.05,  # sentence opener diversity
-    0.07,  # punctuation fingerprint
-    0.07,  # vocab clustering      (+0.02 — top-5 failing, reliable on hard models)
-    0.07,  # density melody
-    0.05,  # (reserved — placeholder equals avg of other signals)
+    0.00,  # perplexity proxy      — cut: gap +1.4, replaced by GPT-2 in Phase 2
+    0.11,  # burstiness            — gap +20.3, strong structural signal
+    0.13,  # lexical diversity     — boosted: gap +34.3, single biggest discriminator
+    0.07,  # AI phrases            — gap +7.4, catches naive AI
+    0.00,  # hedging               — cut: gap -3.0, inverted (hurts recall)
+    0.00,  # passive voice         — cut: gap +0.6, random noise
+    0.00,  # transitions           — cut: gap -10.6, strongly inverted on MPT/Llama
+    0.02,  # clause depth (punctuation variance proxy)
+    0.07,  # punctuation variance  — gap +6.4
+    0.12,  # paragraph uniformity  — gap +26.6, reliable across all model families
+    0.05,  # rare words            — boosted: gap +26.3
+    0.12,  # formality shift       — gap +19.9, top signal across all model families
+    0.04,  # n-gram repetition     — gap +20.5
+    0.08,  # sentence opener div   — boosted: gap +27.5 (recently fixed to 1-word)
+    0.04,  # punctuation fingerprint — reduced: gap +3.8, weak signal
+    0.07,  # vocab clustering      — gap +24.3
+    0.03,  # density melody        — reduced: gap +3.6, weak signal
+    0.05,  # reserved placeholder  — mean of other signals
 ]
 
 assert abs(sum(WEIGHTS) - 1.0) < 1e-6, f"Weights must sum to 1, got {sum(WEIGHTS)}"
