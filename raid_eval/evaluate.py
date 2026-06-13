@@ -36,6 +36,11 @@ from tqdm import tqdm
 
 from detector import score_text
 
+try:  # Windows consoles default to cp1252 and choke on unicode glyphs in output
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 
 # ---------------------------------------------------------------------------
 # RAID data loading
@@ -205,11 +210,149 @@ def print_results(results: dict):
 
 
 # ---------------------------------------------------------------------------
+# Multi-dataset evaluation (cross-source generalization)
+# ---------------------------------------------------------------------------
+
+import csv as _csv
+from pathlib import Path as _Path
+
+_csv.field_size_limit(10_000_000)  # essays/abstracts can be long
+
+EVAL_DIR = _Path(__file__).parent.parent / "eval"
+MULTI_CSV = EVAL_DIR / "multi_dataset.csv"
+ADV_CSV = EVAL_DIR / "adversarial_raid.csv"
+
+
+def read_multi_csv(path):
+    """Read the unified multi-dataset CSV into row dicts."""
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for r in _csv.DictReader(f):
+            text = (r.get("text_content") or "").strip()
+            if len(text.split()) < 20:
+                continue
+            rows.append({
+                "text": text,
+                "label": int(r["is_ai_generated"]),
+                "source": r.get("source_dataset", "") or "",
+                "domain": r.get("domain", "") or "",
+                "model": r.get("model", "") or "",
+            })
+    return rows
+
+
+def _prf(y_true, y_pred):
+    return {
+        "precision": round(precision_score(y_true, y_pred, zero_division=0), 4),
+        "recall": round(recall_score(y_true, y_pred, zero_division=0), 4),
+        "f1": round(f1_score(y_true, y_pred, zero_division=0), 4),
+        "acc": round(sum(a == b for a, b in zip(y_true, y_pred)) / len(y_true), 4),
+        "n": len(y_true),
+        "n_ai": sum(y_true),
+    }
+
+
+def score_rows(rows):
+    print(f"Scoring {len(rows)} rows through detector.score_text...")
+    for r in tqdm(rows):
+        r["pred"] = score_text(r["text"])["prediction"]
+    return rows
+
+
+def _line(label, m):
+    if m["n_ai"] in (0, m["n"]):
+        tag = "AI-only" if m["n_ai"] == m["n"] else "human-only"
+        print(f"  {label:<22} ({tag}, n={m['n']})  recall={m['recall']:.3f}  prec={m['precision']:.3f}")
+    else:
+        print(f"  {label:<22} P={m['precision']:.3f}  R={m['recall']:.3f}  F1={m['f1']:.3f}  "
+              f"acc={m['acc']:.3f}  n={m['n']}")
+
+
+def report_per_source(rows):
+    print("\n" + "=" * 64)
+    print("PER-SOURCE  (rule-based detector — fixed, no training)")
+    print("=" * 64)
+    by = defaultdict(lambda: {"t": [], "p": []})
+    for r in rows:
+        by[r["source"]]["t"].append(r["label"])
+        by[r["source"]]["p"].append(r["pred"])
+    for src in sorted(by):
+        _line(src, _prf(by[src]["t"], by[src]["p"]))
+
+
+def report_cross_dataset(rows):
+    # For a fixed rule-based detector there is no train step, so the cross-dataset
+    # matrix collapses to the per-source diagonal. The real train-A/test-B matrix
+    # is produced by train_stylometric.py once a learned classifier exists.
+    print("\n" + "=" * 64)
+    print("CROSS-DATASET  (rule-based: diagonal only — see train_stylometric.py")
+    print("                for the real train-A / test-B generalization matrix)")
+    print("=" * 64)
+    by = defaultdict(lambda: {"t": [], "p": []})
+    for r in rows:
+        by[r["source"]]["t"].append(r["label"])
+        by[r["source"]]["p"].append(r["pred"])
+    srcs = sorted(by)
+    print("  test→".ljust(24) + "  ".join(s[:10].rjust(10) for s in srcs))
+    print(f"  {'(fixed detector)':<22}" + "  ".join(
+        f"{_prf(by[s]['t'], by[s]['p'])['f1']:.3f}".rjust(10) for s in srcs))
+
+
+def report_leave_one_model_out(rows):
+    print("\n" + "=" * 64)
+    print("LEAVE-ONE-MODEL-OUT  (F1 on each held-out generator family)")
+    print("=" * 64)
+    by_model = defaultdict(lambda: {"t": [], "p": []})
+    for r in rows:
+        if r["model"] and r["label"] == 1:  # generator families are AI rows
+            by_model[r["model"]]["t"].append(r["label"])
+            by_model[r["model"]]["p"].append(r["pred"])
+    if not by_model:
+        print("  (no model labels present)")
+        return
+    for m in sorted(by_model, key=lambda k: -len(by_model[k]["t"])):
+        d = by_model[m]
+        # recall = fraction of this model's AI text we caught (single-class slice)
+        rec = sum(d["p"]) / len(d["p"])
+        print(f"  {m:<26} recall={rec:.3f}  (n={len(d['p'])} AI samples)")
+
+
+def report_adversarial():
+    if not ADV_CSV.exists():
+        print("\n(no adversarial_raid.csv — skipping adversarial slice)")
+        return
+    rows = score_rows(read_multi_csv(ADV_CSV))
+    print("\n" + "=" * 64)
+    print("ADVERSARIAL SLICE  (held-out RAID attack!=\"none\")")
+    print("=" * 64)
+    _line("raid_adversarial", _prf([r["label"] for r in rows], [r["pred"] for r in rows]))
+
+
+def multi_eval():
+    if not MULTI_CSV.exists():
+        print(f"Missing {MULTI_CSV}. Run: node eval/fetch_dataset.js --multi --per-source 400 --balance")
+        sys.exit(1)
+    rows = score_rows(read_multi_csv(MULTI_CSV))
+    overall = _prf([r["label"] for r in rows], [r["pred"] for r in rows])
+    print("\n" + "=" * 64)
+    print(f"OVERALL (all sources pooled)  n={overall['n']}")
+    print("=" * 64)
+    _line("ALL", overall)
+    report_per_source(rows)
+    report_cross_dataset(rows)
+    report_leave_one_model_out(rows)
+    report_adversarial()
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate AI Detector against RAID benchmark")
+    parser.add_argument("--multi", action="store_true",
+                        help="Evaluate against eval/multi_dataset.csv (per-source, cross-dataset, "
+                             "leave-one-model-out, adversarial)")
     parser.add_argument("--n", type=int, default=500, help="Number of samples (default 500)")
     parser.add_argument("--domain", type=str, default=None, help="Filter by domain (e.g. news, reddit)")
     parser.add_argument("--model", type=str, default=None, help="Filter by LLM (e.g. gpt4, llama2)")
@@ -219,6 +362,10 @@ def main():
     args = parser.parse_args()
 
     random.seed(args.seed)
+
+    if args.multi:
+        multi_eval()
+        return
 
     samples = load_raid_data(args.n, args.domain, args.model, args.adversarial)
     if not samples:
