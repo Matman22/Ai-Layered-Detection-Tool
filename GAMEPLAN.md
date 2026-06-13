@@ -16,10 +16,9 @@ past 95%.
 | Phase | Recall | Precision | F1 |
 |---|---|---|---|
 | Current Python port | 87.6% | 92.7% | 0.843 |
-| After Phase 1 (signal fixes) | ~90% | ~93% | ~0.915 |
-| After Phase 2 (real perplexity) | ~92% | ~92% | ~0.92 |
-| After Phase 3 (RAIDAR) | ~95% | ~93% | ~0.94 |
-| After Phase 4 (weight optimization) | ~96% | ~94% | ~0.95 |
+| After Phase 1 (signal parity) | ~85% | ~97% | ~0.905 |
+| After Phase 2 (RAIDAR) | ~95% | ~93% | ~0.94 |
+| After Phase 3 (weight optimization) | ~96% | ~94% | ~0.95 |
 
 All targets measured on `liamdugan/raid` abstracts split, 500 samples.
 
@@ -41,13 +40,13 @@ User pastes text
 ┌──────────────────────────────────────────┐
 │         FastAPI Backend (Python)         │
 │                                          │
-│  Layer 1 — Heuristics (16 signals)       │
+│  Layer 1 — Heuristics (17 signals)       │
 │  Layer 2 — Forensic character scan       │
-│  Layer 3 — Real GPT-2 Perplexity         │
-│  Layer 4 — RAIDAR (Claude API rewrite)   │
+│  Layer 3 — RAIDAR (Claude API rewrite)   │
+│  Layer 4 — Weight-optimized ensemble     │
 │  Layer 5 — Authorial consistency         │
 │                                          │
-│  Ensemble → weighted score → verdict     │
+│  Unified scoring → verdict               │
 │  Returns: score, verdict, per-signal     │
 └──────────────────────────────────────────┘
 ```
@@ -92,68 +91,7 @@ adding anything new. These are bugs, not missing features.
 
 ---
 
-## Phase 2 — Real Perplexity (GPT-2)
-**Goal:** Replace the 3-proxy perplexity approximation with a real language
-model perplexity score. GPT-2 is free, runs locally, and is the standard
-baseline for AI detection.
-
-**New file:** `detector_v2/perplexity.py`
-
-### How It Works
-GPT-2 assigns a probability to every token. AI text is written *by* an LM so
-it stays in high-probability regions — perplexity is low. Human text wanders
-into low-probability regions — perplexity is high.
-
-```
-Human text → High perplexity (unpredictable word choices)
-AI text    → Low perplexity  (predictable, stays on-manifold)
-```
-
-### Checklist
-
-- [ ] **Install dependencies**
-  ```bash
-  pip install torch transformers accelerate
-  ```
-
-- [ ] **Implement `perplexity.py`**
-  ```python
-  from transformers import GPT2LMHeadModel, GPT2TokenizerFast
-  import torch
-
-  def gpt2_perplexity(text: str, stride: int = 512) -> float:
-      """Sliding-window perplexity using GPT-2. Lower = more AI-like."""
-      # Load model once and cache
-      # Tokenize, slide window, average NLL
-      # Return normalized 0-100 score (invert so higher = more AI)
-  ```
-
-- [ ] **Sliding window approach** (handles texts longer than GPT-2's 1024 token limit)
-  - Window size: 512 tokens, stride: 256
-  - Average negative log-likelihood across windows
-  - Normalize against calibration corpus (RAID human samples)
-
-- [ ] **Score normalization**
-  - Run on 200 RAID human samples → establish "human baseline" perplexity
-  - Run on 200 RAID AI samples → establish "AI baseline"
-  - Map onto 0–100 scale: 100 = definitely AI, 0 = definitely human
-
-- [ ] **Add to detector ensemble**
-  - Add as `layer3_perplexity` signal
-  - Initial weight: 0.20 (high — this is a real signal, not a proxy)
-  - Reduce heuristic weights proportionally to keep sum = 1.0
-
-- [ ] **Evaluate improvement**
-  ```bash
-  python evaluate.py --n 500 --seed 42
-  ```
-  Target: recall > 92%, F1 > 0.92
-
-- [ ] **Add `--fast` flag** to skip perplexity for quick runs (heuristics only)
-
----
-
-## Phase 3 — RAIDAR (Rewrite-Based Detection)
+## Phase 2 — RAIDAR (Rewrite-Based Detection)
 **Goal:** Use the Claude API to rewrite the input text and measure how much it
 changed. AI text gets barely rewritten (already fluent); human text gets
 substantially rewritten.
@@ -237,7 +175,7 @@ Score: 100 − (edit_distance × 200)  → higher = more AI
 
 ---
 
-## Phase 4 — Weight Optimization
+## Phase 3 — Weight Optimization
 **Goal:** Use scikit-learn to find optimal signal weights from RAID labeled data
 instead of hand-tuning.
 
@@ -271,7 +209,7 @@ instead of hand-tuning.
 
 ---
 
-## Phase 5 — FastAPI Backend
+## Phase 4 — FastAPI Backend
 **Goal:** Expose the Python detector as a REST API so the JS frontend can
 call it.
 
@@ -308,8 +246,8 @@ call it.
 
 - [ ] **Three modes**
   - `fast` — heuristics only, <100ms, no API cost
-  - `full` — heuristics + GPT-2 perplexity, ~2s, no API cost
-  - `raidar` — all signals including Claude rewrite, ~5s, ~$0.001/call
+  - `full` — heuristics + RAIDAR, ~5s, ~$0.001/call
+  - `raidar` — alias for full mode (kept for backwards-compat)
 
 - [ ] **Response schema**
   ```json
@@ -320,15 +258,14 @@ call it.
     "signals": {
       "burstiness": 74.2,
       "formality_shift": 91.5,
-      "gpt2_perplexity": 82.1,
+      "lexical_diversity": 85.0,
       "raidar": 88.0,
       ...
     },
     "layers": {
       "l1_heuristics": 71,
       "l2_forensic": 0,
-      "l3_perplexity": 82,
-      "l4_raidar": 88,
+      "l3_raidar": 88,
       "l5_authorial": 45
     },
     "mode": "full"
@@ -355,7 +292,7 @@ call it.
 
 ---
 
-## Phase 6 — Deploy Backend
+## Phase 5 — Deploy Backend
 **Goal:** Get the API running at a public URL so the JS frontend can call it.
 
 ### Options (pick one)
@@ -394,7 +331,7 @@ call it.
 
 ---
 
-## Phase 7 — Update JS Frontend
+## Phase 6 — Update JS Frontend
 **Goal:** Add an "Enhance with API" toggle to the live site that calls the
 Python backend when enabled.
 
@@ -438,7 +375,7 @@ Python backend when enabled.
 
 ---
 
-## Phase 8 — Documentation & Portfolio
+## Phase 7 — Documentation & Portfolio
 **Goal:** Make this project presentable for co-op applications.
 
 ### Checklist
@@ -483,11 +420,10 @@ Ai-Layered-Detection-Tool/
 │   ├── __init__.py
 │   ├── detector.py             ← main scorer (all signals)
 │   ├── heuristics.py           ← ported + fixed JS signals
-│   ├── perplexity.py           ← GPT-2 perplexity (Phase 2)
-│   ├── raidar.py               ← Claude rewrite signal (Phase 3)
+│   ├── raidar.py               ← Claude rewrite signal (Phase 2)
 │   ├── forensic.py             ← character-level forensics
 │   ├── authorial.py            ← Layer 5 micro-habits
-│   └── optimize_weights.py     ← sklearn weight tuning (Phase 4)
+│   └── optimize_weights.py     ← sklearn weight tuning (Phase 3)
 │
 ├── api/                        ← FastAPI backend (Phase 5)
 │   ├── main.py
@@ -508,18 +444,15 @@ Ai-Layered-Detection-Tool/
 
 ## Quick-Start Checklist (Do These First)
 
-Before writing any new code, fix the existing bugs:
+Phase 1 (signal parity) is complete. Next step: Phase 2 (RAIDAR).
 
 ```bash
-# 1. Audit and fix the three broken signals
-#    rare_words / sentence_opener_diversity / clause_depth
-
-# 2. Re-run to confirm fixes
+# Verify Phase 1 results
 cd raid_eval
-python evaluate.py --n 500
+python evaluate.py --n 500 --seed 42
 
-# 3. Then start Phase 2 (perplexity)
-pip install torch transformers
+# Install dependencies for Phase 2
+pip install anthropic python-levenshtein
 ```
 
 ---
@@ -528,17 +461,17 @@ pip install torch transformers
 
 | Phase | Estimated Time | Complexity |
 |---|---|---|
-| 1 — Fix signals | 2–3 hours | Low |
-| 2 — GPT-2 perplexity | 4–6 hours | Medium |
-| 3 — RAIDAR | 3–4 hours | Medium |
-| 4 — Weight optimization | 2–3 hours | Low |
-| 5 — FastAPI | 4–6 hours | Medium |
-| 6 — Deploy | 1–2 hours | Low |
-| 7 — JS frontend update | 3–4 hours | Medium |
-| 8 — Documentation | 2–3 hours | Low |
-| **Total** | **~25–30 hours** | |
+| 1 — Signal parity | 4–6 hours | Medium |
+| 2 — RAIDAR | 3–4 hours | Medium |
+| 3 — Weight optimization | 2–3 hours | Low |
+| 4 — FastAPI | 4–6 hours | Medium |
+| 5 — Deploy | 1–2 hours | Low |
+| 6 — JS frontend update | 3–4 hours | Medium |
+| 7 — Documentation | 2–3 hours | Low |
+| **Total** | **~20–28 hours** | |
 
 ---
 
-*Last updated: 2026-05-14*
+*Last updated: 2026-06-13*
 *Benchmarks measured on liamdugan/raid, abstracts split, 500 samples, seed=42*
+*Note: Phase 2 (GPT-2 perplexity) removed 2026-06-13 due to client-side performance concerns. RAIDAR moved to Phase 2.*
