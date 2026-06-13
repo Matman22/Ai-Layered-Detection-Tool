@@ -78,41 +78,18 @@ function scoreText(text) {
   const forensic         = runForensicAnalysis(text);
   const layer5           = runAuthoralConsistency(text);
 
-  // Weights — SINGLE SCORING CONFIG: must stay in sync with the array in
-  // index.html (runAnalysis) and raid_eval/detector.py (WEIGHTS).
-  const weights = [
-    0.00, // perplexity proxy
-    0.11, // burstiness
-    0.13, // lexical diversity
-    0.07, // AI phrases
-    0.00, // hedging
-    0.00, // passive voice
-    0.00, // transitions
-    0.02, // clause depth
-    0.07, // punctuation variance
-    0.12, // paragraph uniformity
-    0.05, // rare words
-    0.12, // register stability
-    0.04, // n-gram repetition
-    0.08, // sentence opener diversity
-    0.04, // punctuation fingerprint
-    0.07, // vocab clustering
-    0.03, // density melody
-    0.05, // ensemble mean slot (mean of the other 17 signals)
-  ];
-
   const scores = [
     perplexity.score, burstiness, lexical, aiPhrases, hedging, passive,
     transitions, clauseDepth, punctuation, paraUniformity, rareWords, formality,
-    ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody, 0,
+    ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody,
   ];
-  scores[17] = scores.slice(0, 17).reduce((a, b) => a + b, 0) / 17;
 
-  // Linear L1 composite — kept for display parity only.
-  const composite = Math.round(Math.min(100, scores.reduce((sum, s, i) => sum + s * weights[i], 0)));
+  // Layer-1 score from the trained classifier (classifierL1 is a function
+  // declaration in index.html — leaks from eval, stays in sync automatically).
+  const composite = Math.round(classifierL1(scores));
 
   // Phase 3 learned model — must match the ML_WEIGHTS array in index.html.
-  // Logistic regression over all 20 signals, trained on JS features (RAID).
+  // const declarations don't leak from eval, so this is a local copy.
   const ML_WEIGHTS = [
     +0.002839, +0.046114, +0.029001, +0.054033, -0.022433, -0.020644, -0.073171,
     -0.001024, +0.017217, +0.149378, -0.061777, +0.004403, +0.061725, -0.001617,

@@ -1431,6 +1431,30 @@ function sampleTextSubset(text, windowSize) {
   return words.slice(startIdx, startIdx + windowSize).join(' ');
 }
 
+// ── Top-1 stylometric classifier (logistic regression) ──────────────────────
+// Learned replacement for the old hand-tuned Layer-1 weighted sum. Trained
+// offline by eval/train_classifier.js on eval/features.csv (exported to
+// eval/model.json). On a held-out 5-fold cross-validation the classifier scored
+// F1 0.773 ± 0.051 vs 0.604 ± 0.034 for the hand weights (+0.168). Feature order
+// MUST match the scores[] array in runAnalysis (indices 0–16). Signals that are
+// constant on the training data (std defaulted to 1, weight learned ≈ 0) simply
+// don't contribute — the model leans on the signals that actually vary.
+const CLASSIFIER_MODEL = {
+  mean: [50, 50, 39.89628519999997, 28.41, 12.438445800000006, 66.4, 6.545823400000006, 32.75, 50, 50, 27.587284800000027, 50, 17.3660148, 50, 50, 50, 79.044],
+  std: [1, 1, 11.804919732727573, 37.68779510663881, 14.618599539348558, 47.23388614120146, 8.909081136624154, 13.47915056670857, 1, 1, 9.61992973702454, 1, 16.84634724126096, 1, 1, 1, 10.383162524009725],
+  weights: [0, 0, -0.898207648523656, 0.976977243391642, 0.061414288884123966, -0.22646532066761693, 0.6593995708836554, 0.2513696327420549, 0, 0, -0.5022849509935704, 0, 1.366443377532326, 0, 0, 0, 0.12896766194614911],
+  bias: -0.8139782401720886,
+};
+// Standardize the 17-feature vector, apply the logistic model, return a 0–100
+// AI probability that becomes the Layer-1 score.
+function classifierL1(features) {
+  let z = CLASSIFIER_MODEL.bias;
+  for (let i = 0; i < features.length; i++) {
+    z += CLASSIFIER_MODEL.weights[i] * ((features[i] - CLASSIFIER_MODEL.mean[i]) / CLASSIFIER_MODEL.std[i]);
+  }
+  return (1 / (1 + Math.exp(-z))) * 100;
+}
+
 // Runs sampleCount independent random-window analyses on the document.
 // Each sample scores 5 signals; variance in those scores reveals origin inconsistency.
 function runMonteCarloAnalysis(text) {
@@ -2555,8 +2579,9 @@ async function runAnalysis() {
     ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody, 0];
   scores[17] = scores.slice(0, 17).reduce((a, b) => a + b, 0) / 17;
 
-  // Linear weighted sum — kept for the Layer 1 panel display only (per-layer transparency).
-  const composite = Math.round(Math.min(100, scores.reduce((sum, s, i) => sum + s * weights[i], 0)));
+  // Layer-1 score from the trained classifier (eval/model.json).
+  // CV F1 0.773 vs 0.604 for the old hand-tuned weighted sum.
+  const composite = Math.round(classifierL1(scores.slice(0, 17)));
   const aiScore = composite;
 
   // Combined score — Phase 3 learned model. Logistic regression over all 20
@@ -2775,7 +2800,7 @@ async function runAnalysis() {
     { t: '00:16', m: `[v2] Vocabulary clustering: ${Math.round(vocabCluster)}% — domain term distribution mapped`, cls: vocabCluster > 65 ? 'warn' : '' },
     { t: '00:17', m: `[ensemble] Density melody: runs [${densityMelodyEnsemble.runs.filter(r=>r.dataPoints>=3&&r.confidence>0).map(r=>r.score).join(', ')||'none'}] → weighted avg ${densityMelody}% · agreement ${densityMelodyEnsemble.agreement}% · ${densityMelodyEnsemble.label}`, cls: densityMelody > 65 ? 'warn' : densityMelodyEnsemble.validRuns === 0 ? '' : 'highlight' },
     { t: '00:18', m: `[MC] Monte Carlo: ${monteCarlo.validSamples} samples · mean ${monteCarlo.mean}% · σ ${monteCarlo.stdDev}% · range ${monteCarlo.range}% · ${monteCarlo.classification}`, cls: monteCarlo.mixed ? 'warn' : monteCarlo.validSamples === 0 ? '' : 'highlight' },
-    { t: '00:18', m: `Rebalanced composite computed across 18 vectors`, cls: 'highlight' },
+    { t: '00:18', m: `Layer-1 score from trained classifier (logistic regression over 17 signals)`, cls: 'highlight' },
     { t: '00:19', m: `[ L2 ] Invisible char scan: ${forensic.invisible.reduce((a,c)=>a+c.count,0)} chars found across ${forensic.invisible.length} Unicode type(s)`, cls: forensic.invisible.length > 0 ? 'warn' : '' },
     { t: '00:19', m: `[ L2 ] Homoglyph scan: ${forensic.homoglyphs.reduce((a,c)=>a+c.count,0)} substitution(s) across ${forensic.homoglyphs.length} script type(s)`, cls: forensic.homoglyphs.length > 0 ? 'warn' : '' },
     { t: '00:20', m: `[ L2 ] Quote encoding: ${forensic.quotes.mixed ? 'MIXED smart+straight — copy-paste artifact' : forensic.quotes.hasSmart ? 'Smart quotes only' : 'Straight quotes only'}`, cls: forensic.quotes.mixed ? 'warn' : '' },
