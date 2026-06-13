@@ -78,53 +78,45 @@ function scoreText(text) {
   const forensic         = runForensicAnalysis(text);
   const layer5           = runAuthoralConsistency(text);
 
-  // Weights — must match the tuned array in index.html
+  // Weights — SINGLE SCORING CONFIG: must stay in sync with the array in
+  // index.html (runAnalysis) and raid_eval/detector.py (WEIGHTS).
   const weights = [
-    0.01, // perplexity
+    0.00, // perplexity proxy
     0.11, // burstiness
-    0.06, // lexical diversity
+    0.13, // lexical diversity
     0.07, // AI phrases
-    0.01, // hedging
-    0.01, // passive voice
-    0.03, // transitions
-    0.03, // clause depth
+    0.00, // hedging
+    0.00, // passive voice
+    0.00, // transitions
+    0.02, // clause depth
     0.07, // punctuation variance
     0.12, // paragraph uniformity
-    0.02, // rare words
+    0.05, // rare words
     0.12, // register stability
     0.04, // n-gram repetition
-    0.05, // sentence opener diversity
-    0.07, // punctuation fingerprint
+    0.08, // sentence opener diversity
+    0.04, // punctuation fingerprint
     0.07, // vocab clustering
-    0.07, // density melody
-    0.04, // monte carlo
+    0.03, // density melody
+    0.05, // ensemble mean slot (mean of the other 17 signals)
   ];
 
   const scores = [
     perplexity.score, burstiness, lexical, aiPhrases, hedging, passive,
     transitions, clauseDepth, punctuation, paraUniformity, rareWords, formality,
-    ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody, monteCarlo.mean,
+    ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody, 0,
   ];
+  scores[17] = scores.slice(0, 17).reduce((a, b) => a + b, 0) / 17;
 
-  // Evidence accumulation (only signals above 50 contribute)
-  const evidence     = scores.reduce((sum, s, i) => sum + Math.max(0, s - 50) * weights[i], 0);
-  const baseComposite = Math.min(100, Math.round(evidence * 5));
-
-  // Convergence bonus: anchor signals clustering above 70
-  const anchorIdx  = [1, 3, 11, 15];
-  const anchorsHot = anchorIdx.filter(i => scores[i] > 70).length;
-  const convBonus  = [0, 0, 5, 12, 18][Math.min(anchorsHot, 4)];
-
-  // Smoking-gun bonus: saturated AI phrase score
-  const smokingGunBonus = scores[3] >= 100 ? 30 : scores[3] > 85 ? 15 : 0;
-
-  const composite    = Math.min(100, baseComposite + convBonus + smokingGunBonus);
+  // Linear weighted sum — same aggregation as index.html + detector.py.
+  // (Replaces the old evidence×5 multiplier + convergence/smoking-gun bonuses.)
+  const composite = Math.round(Math.min(100, scores.reduce((sum, s, i) => sum + s * weights[i], 0)));
   const combinedScore = Math.round(Math.min(100, composite * 0.75 + forensic.score * 0.15 + layer5.score * 0.10));
   const trueCombined  = combinedScore; // no metadata for plain-text samples
 
   let verdict;
-  if      (trueCombined >= 50) verdict = 'AI';
-  else if (trueCombined >= 20) verdict = 'Mixed';
+  if      (trueCombined >= 60) verdict = 'AI';
+  else if (trueCombined >= 40) verdict = 'Mixed';
   else                          verdict = 'Human';
 
   return { score: trueCombined, verdict, l1: composite, l2: forensic.score, l5: layer5.score };
