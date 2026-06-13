@@ -1,4 +1,5 @@
 raid-bench
 datasets
 scikit-learn
+numpy
 tqdm

@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+.claude/
+raid_eval/live_results.json
