@@ -1504,25 +1504,24 @@ function runMonteCarloAnalysis(text) {
 }
 
 // Tier 1: near-exclusive LLM fingerprints — even 1 hit is meaningful evidence
+// Lists kept identical to raid_eval/detector.py (AI_PHRASES_T1/T2) for signal parity.
 const AI_PHRASES_T1 = [
-  'it is worth noting', 'it is important to note', "it's worth noting",
-  'it should be noted', 'it is important to understand', 'it is clear that',
-  'it becomes evident', 'it goes without saying', 'needless to say',
-  'delve into', 'delves into', 'multifaceted', 'at its core', 'in the realm of',
-  'as we explore', 'tapestry', 'underscore', 'pivotal', 'embodies', 'underpins',
-  'first and foremost', 'last but not least', "in today's world",
-  "in today's fast-paced", "in today's ever-changing", 'one can argue',
-  'it is crucial to note', 'it is essential to note',
+  'it is worth noting', 'delve into', 'multifaceted', 'at its core',
+  'in the realm of', 'as we explore', 'tapestry', 'underscore', 'pivotal',
+  'embodies', 'underpins', 'first and foremost', "in today's world",
+  "in today's fast-paced", 'one can argue', "it's important to note",
+  'it is important to note', 'in this essay', 'in summary', 'in conclusion',
+  'it goes without saying', 'needless to say', 'the fact of the matter',
 ];
 // Tier 2: common in AI output but appear in careful human writing — need multiple hits
 const AI_PHRASES_T2 = [
-  'in conclusion', 'furthermore', 'moreover', 'in summary', 'to summarize',
-  'it is crucial', 'it is essential', 'in the context of', 'leveraging', 'foster',
+  'furthermore', 'moreover', 'in conclusion', 'leveraging', 'foster',
   'paradigm', 'robust', 'streamline', 'synergy', 'utilize', 'navigating',
-  'holistic', 'nuanced', 'in light of', 'when it comes to', 'let us',
-  'consequently', 'in addition', 'moving forward', 'going forward',
-  'best practices', 'game-changer', 'cutting-edge', 'proactive', 'actionable',
-  'impactful', 'transformative', 'stakeholders',
+  'holistic', 'nuanced', 'when it comes to', 'best practices',
+  'game-changer', 'cutting-edge', 'proactive', 'stakeholders',
+  'innovative', 'comprehensive', 'dynamic', 'actionable', 'scalable',
+  'impactful', 'deep dive', 'think outside the box', 'move the needle',
+  'circle back', 'bandwidth', 'ecosystem', 'disruptive', 'transformative',
 ];
 // Combined for backwards-compat references elsewhere
 const AI_PHRASES = [...AI_PHRASES_T1, ...AI_PHRASES_T2];
@@ -1531,11 +1530,15 @@ const HEDGE_WORDS = ['perhaps', 'possibly', 'might', 'may', 'could', 'seem', 'ap
   'generally', 'typically', 'often', 'usually', 'tend to', 'suggest', 'indicate'];
 
 function tokenize(text) {
-  return text.toLowerCase().match(/\b[a-z']+\b/g) || [];
+  // Aligned to detector.py tokenize: alphabetic runs only (apostrophes split words).
+  return text.toLowerCase().match(/[a-z]+/g) || [];
 }
 
 function getSentences(text) {
-  return text.match(/[^.!?]+[.!?]+/g) || [text];
+  // Aligned to detector.py get_sentences: split on whitespace following terminal
+  // punctuation, keeping any trailing sentence that lacks a final mark.
+  const parts = text.trim().split(/(?<=[.!?])\s+/).filter(p => p.trim().length > 0);
+  return parts.length ? parts : [text];
 }
 
 function getParagraphs(text) {
@@ -1719,8 +1722,8 @@ function calcAIPhrases(text) {
   const t1Score = tier1 === 0 ? 0 : Math.min(95, 58 + (tier1 - 1) * 12);
   // Tier 2: 1 hit → 15, 2 → 27, 3+ → 35 + 8 each, cap at 55
   const t2Score = tier2 === 0 ? 0 : tier2 === 1 ? 15 : Math.min(55, 27 + (tier2 - 2) * 8);
-  // Combo bonus for finding both tiers together
-  const combo = tier1 >= 1 && tier2 >= 2 ? 12 : tier1 >= 1 && tier2 >= 1 ? 5 : 0;
+  // Combo bonus for finding both tiers together (matches detector.py: min(10, t1+t2))
+  const combo = (tier1 > 0 && tier2 > 0) ? Math.min(10, tier1 + tier2) : 0;
   const score = Math.min(100, t1Score + t2Score + combo);
   return { score, found };
 }
@@ -1791,26 +1794,28 @@ function calcClauseDepth(text) {
 // AI writes uniformly punctuated sentences (low CV); humans mix bare and complex
 // sentences producing high CV. Works on any text with sentence boundaries.
 function calcPunctuationVariance(text) {
-  const sentences = getSentences(text).filter(s => s.trim().length > 10);
-  if (sentences.length < 4) return 50;
-  const counts = sentences.map(s => (s.match(/[,;:—\-()]/g) || []).length);
+  // Aligned to detector.py calc_punctuation_variance for signal parity.
+  const sentences = getSentences(text);
+  if (sentences.length < 3) return 50;
+  const counts = sentences.map(s => (s.match(/[,;:\-—]/g) || []).length);
   const avg = counts.reduce((a,b)=>a+b,0) / counts.length;
-  if (avg < 0.3) return 50; // text has almost no punctuation — neutral
+  if (avg === 0) return 50; // degenerate guard (no-punctuation text) — never fires on RAID
   const variance = counts.reduce((a,b)=>a+Math.pow(b-avg,2),0) / counts.length;
   const cv = Math.sqrt(variance) / avg;
   // Low CV = uniform per sentence = AI. High CV = varied = human.
-  return Math.max(0, Math.min(100, Math.round(90 - cv * 55)));
+  return Math.max(0, Math.min(100, 100 - cv * 80));
 }
 
 // 10. Paragraph length uniformity — only meaningful with real paragraph breaks
 function calcParagraphUniformity(text) {
-  const paras = getNaturalParagraphs(text);
+  // Aligned to detector.py calc_paragraph_uniformity / get_paragraphs for signal parity.
+  const paras = text.trim().split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
   if (paras.length < 2) return 50;
-  const lengths = paras.map(p => p.trim().split(/\s+/).length);
+  const lengths = paras.map(p => p.split(/\s+/).length);
   const avg = lengths.reduce((a,b)=>a+b,0)/lengths.length;
   const variance = lengths.reduce((a,b)=>a+Math.pow(b-avg,2),0)/lengths.length;
-  const cv = Math.sqrt(variance)/avg;
-  return Math.max(0, Math.min(100, 90 - (cv * 80)));
+  const cv = avg > 0 ? Math.sqrt(variance)/avg : 0;
+  return Math.max(0, Math.min(100, 100 - (cv * 70)));
 }
 
 // 11. Rare word usage (AI tends to avoid very uncommon words)
@@ -1868,17 +1873,17 @@ function calcNgramRepetition(text) {
 
 // 14. Sentence-opener diversity — AI starts sentences with similar structures
 function calcSentenceOpenerDiversity(text) {
+  // Aligned to detector.py calc_sentence_opener_diversity for signal parity.
   const sentences = getSentences(text);
-  if (sentences.length < 5) return 50;
-  // Extract first word of each sentence (1-word gives better AI/human discrimination)
-  const openers = sentences.map(s => {
-    const words = s.trim().toLowerCase().match(/\b[a-z']+\b/g) || [];
-    return words[0] || '';
-  }).filter(o => o.length > 0);
-  const unique = new Set(openers).size;
-  const diversity = unique / openers.length;
-  // Low diversity = AI (starts sentences the same way repeatedly)
-  return Math.max(0, Math.min(100, 90 - (diversity * 95)));
+  if (sentences.length < 3) return 50;
+  // First whitespace-delimited token of each sentence, lowercased (matches Python s.split()[0]).
+  const firstWords = sentences
+    .map(s => (s.trim().split(/\s+/)[0] || '').toLowerCase())
+    .filter(w => w.length > 0);
+  if (!firstWords.length) return 50;
+  const ttr = new Set(firstWords).size / firstWords.length;
+  // Low diversity (TTR) = AI (starts sentences the same way repeatedly)
+  return Math.max(0, Math.min(100, 100 - ttr * 100));
 }
 
 // 15. Punctuation fingerprinting — em-dash, parenthetical, mid-sentence interruption
