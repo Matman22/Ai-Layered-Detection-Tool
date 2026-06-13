@@ -108,10 +108,24 @@ function scoreText(text) {
   ];
   scores[17] = scores.slice(0, 17).reduce((a, b) => a + b, 0) / 17;
 
-  // Linear weighted sum — same aggregation as index.html + detector.py.
-  // (Replaces the old evidence×5 multiplier + convergence/smoking-gun bonuses.)
+  // Linear L1 composite — kept for display parity only.
   const composite = Math.round(Math.min(100, scores.reduce((sum, s, i) => sum + s * weights[i], 0)));
-  const combinedScore = Math.round(Math.min(100, composite * 0.75 + forensic.score * 0.15 + layer5.score * 0.10));
+
+  // Phase 3 learned model — must match the ML_WEIGHTS array in index.html.
+  // Logistic regression over all 20 signals, trained on JS features (RAID).
+  const ML_WEIGHTS = [
+    +0.002839, +0.046114, +0.029001, +0.054033, -0.022433, -0.020644, -0.073171,
+    -0.001024, +0.017217, +0.149378, -0.061777, +0.004403, +0.061725, -0.001617,
+    -0.029902, -0.089321, +0.021054, +0.078046, +0.035661, -0.028986,
+  ];
+  const ML_INTERCEPT = -10.582955;
+  const mlFeatures = [
+    perplexity.score, burstiness, lexical, aiPhrases, hedging, passive, transitions,
+    clauseDepth, punctuation, paraUniformity, rareWords, formality, ngramRep, openerDiv,
+    punctFinger, vocabCluster, densityMelody, monteCarlo.mean, forensic.score, layer5.score,
+  ];
+  const mlLogit = mlFeatures.reduce((s, x, i) => s + x * ML_WEIGHTS[i], ML_INTERCEPT);
+  const combinedScore = Math.round(100 / (1 + Math.exp(-mlLogit)));
   const trueCombined  = combinedScore; // no metadata for plain-text samples
 
   let verdict;

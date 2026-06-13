@@ -2555,14 +2555,49 @@ async function runAnalysis() {
     ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody, 0];
   scores[17] = scores.slice(0, 17).reduce((a, b) => a + b, 0) / 17;
 
-  // Linear weighted sum — same aggregation as the benchmarked Python detector.
-  // (Replaces the old evidence×5 multiplier + convergence/smoking-gun bonuses,
-  // which over-amplified weak evidence and drove false positives.)
+  // Linear weighted sum — kept for the Layer 1 panel display only (per-layer transparency).
   const composite = Math.round(Math.min(100, scores.reduce((sum, s, i) => sum + s * weights[i], 0)));
   const aiScore = composite;
 
-  // Combined score: L1 75% + L2 15% + L5 10% = 100%
-  const combinedScore = Math.round(Math.min(100, composite * 0.75 + forensic.score * 0.15 + layer5.score * 0.10));
+  // Combined score — Phase 3 learned model. Logistic regression over all 20
+  // signals (17 linguistic + Monte Carlo + forensic + authorial), trained on
+  // JS-extracted features from a balanced 1500-sample RAID set. Weights are in
+  // raw-feature space (StandardScaler folded into the coefficients) so this is a
+  // direct sigmoid — no scaler, no model file, instant in-browser inference.
+  // See raid_eval/optimize_weights_js.py — held-out test F1 0.916, AUC 0.964
+  // (5-fold CV AUC 0.961 ± 0.015). Beats the hand-tuned linear L1+L2+L5 blend
+  // (F1 0.808, AUC 0.888) on the same balanced held-out test set.
+  // Feature order MUST match raid_eval/optimize_weights_js.py FEATURE_NAMES.
+  const ML_WEIGHTS = [
+    +0.002839, // perplexity
+    +0.046114, // burstiness
+    +0.029001, // lexical_diversity
+    +0.054033, // ai_phrases
+    -0.022433, // hedging
+    -0.020644, // passive_voice
+    -0.073171, // transitions
+    -0.001024, // clause_depth
+    +0.017217, // punctuation_variance
+    +0.149378, // paragraph_uniformity
+    -0.061777, // rare_words
+    +0.004403, // formality_shift
+    +0.061725, // ngram_repetition
+    -0.001617, // sentence_opener_diversity
+    -0.029902, // punctuation_fingerprint
+    -0.089321, // vocab_clustering
+    +0.021054, // density_melody
+    +0.078046, // monte_carlo
+    +0.035661, // forensic
+    -0.028986, // authorial
+  ];
+  const ML_INTERCEPT = -10.582955;
+  const mlFeatures = [
+    perplexity.score, burstiness, lexical, aiPhrases, hedging, passive, transitions,
+    clauseDepth, punctuation, paraUniformity, rareWords, formality, ngramRep, openerDiv,
+    punctFinger, vocabCluster, densityMelody, monteCarlo.mean, forensic.score, layer5.score,
+  ];
+  const mlLogit = mlFeatures.reduce((s, x, i) => s + x * ML_WEIGHTS[i], ML_INTERCEPT);
+  const combinedScore = Math.round(100 / (1 + Math.exp(-mlLogit)));
 
   document.getElementById('analyzeBtn').disabled = false;
 
