@@ -31,19 +31,49 @@ Scores consistency of the habit, not the habit itself — so formal and casual
 writers both score human for different reasons.
 
 ## Scoring Model
-Unified weighted evidence model — not chained multipliers:
-- Layer 1 (linguistic): 55% weight × text reliability factor
-- Layer 2 (forensic): 20% weight, always active
-- Layer 3 (metadata): 25% weight, only active when file is dropped
-- Confidence penalty: short texts nudged toward 50% (uncertain)
-- Text reliability: <100 words=0.6, <300=0.82, <600=0.92, 600+=1.0
+Two learned logistic-regression models (replaced the old hand-tuned weighted sum):
+- `classifierL1(features)` — 17-signal LR over the linguistic vectors. Produces the
+  Layer-1 score shown on the verdict card. CV F1 0.773. Weights live in the
+  `CLASSIFIER_MODEL` const (mean/std/weights/bias, StandardScaler folded in).
+- `ML_WEIGHTS` + `ML_INTERCEPT` — 20-signal LR (17 linguistic + Monte Carlo + forensic
+  + authorial) producing the final **combined** score. Raw-feature-space sigmoid, no
+  scaler/model file — instant in-browser inference. Held-out F1 0.916, AUC 0.964.
+  Trained in raid_eval/optimize_weights_js.py; feature order MUST match there.
+- Metadata fold-in: when a file is loaded, combined = combined×0.85 + metaBoost
+  (metadata can only push the score up, never below the linguistic signal).
+- Verdict bands: ≥60 AI · 40–59 Mixed · <40 Human.
+
+All 17 linguistic signal values are oriented as **AI-likelihood** (high = more
+machine-like), so they feed the classifier directly and plot directly on the radar.
+
+## UI — Analyst Console (premium dark)
+Single-page console, stacked sections (no tabs). Detection JS is decoupled from
+presentation: the `<style>` + `<body>` markup own the look; `runAnalysis()` does
+computation then renders into fixed element IDs.
+- Verdict hero + radial **gauge** (inline SVG, `#gauge`) — combined score.
+- Layer cards (`#layerCards`) — L1 / L2 / L5 (+ L3 when a file is loaded).
+- **Signal radar** (`#radar`, inline SVG, zero deps) — 17-axis spider chart, the
+  document polygon (rose) over a dashed human-reference band. The centerpiece.
+- Ranked top contributors (`#rankList`) + full signal grid (`#sigGrid`, 17 cards).
+- "Deeper analysis": forensic / Layer 5 / Monte Carlo / metadata panels + raw log.
+  These render via untouched functions; they self-style through CSS variables, so
+  the palette is controlled entirely by `:root` (premium-dark, single indigo accent,
+  rose=AI / teal=human / amber=caution).
+- Fonts: Inter (body), Syne (display), Space Mono (data/labels).
+- Known gap: the radar's "Human reference" is a flat 35% placeholder (labeled
+  illustrative) — replace with real per-signal human means from eval data.
 
 ## File Structure
 ```
-index.html          ← entire app (2100+ lines, single file)
-CLAUDE.md           ← this file
-AI_Detector_Roadmap.md  ← feature roadmap and industry research
-README.md           ← GitHub project documentation
+index.html              ← entire app (~2300 lines, single file)
+index.backup.html       ← pre-console-rewrite snapshot (safe to delete once happy)
+mockup-console.html      ← standalone console mockup used to approve the redesign
+CLAUDE.md               ← this file
+GAMEPLAN.md             ← 10-phase roadmap (current source of truth)
+AI_Detector_Roadmap.md  ← older feature roadmap + industry research
+README.md               ← GitHub project documentation
+raid_eval/              ← Node scorer + Python training pipeline (RAID eval)
+eval/                   ← model.json + feature extraction/training scripts
 ```
 
 ## Tech Stack
@@ -70,13 +100,21 @@ git push
 ```
 
 ## Known Issues / Watch Out For
-- File is 2100+ lines — be surgical with edits, don't rewrite whole sections
+- File is ~2300 lines — be surgical with edits, don't rewrite whole sections
 - str_replace edits have dropped function declaration lines before (e.g. getLevel,
   AI_PHRASES const) — always verify surrounding context when editing
 - All const declarations in runAnalysis() must be unique — browser throws
   "already declared" if duplicated
 - PDF.js loads from CDN on first PDF drop — requires internet connection
-- Scoring weights must sum to 1.0 across all 17 linguistic vectors
+- The detection JS (the single `<script>` block) and the head/body markup are
+  decoupled. For large UI changes, prefer splicing at the `<script>` boundary so the
+  detection code is preserved byte-for-byte; only the rendering half of runAnalysis
+  touches the DOM. Render targets are fixed IDs: verdictHero, verdictTitle, verdictSub,
+  gauge, layerCards, radar, rankList, sigGrid, forensicBanner, layer5Panel,
+  monteCarloPanel, metaPanel, logBox.
+- SVG presentation attributes (fill/stroke) do NOT resolve CSS variables — the radar
+  and gauge use hardcoded hex (kept in sync with the `:root` palette).
+- ML_WEIGHTS feature order must match raid_eval/optimize_weights_js.py FEATURE_NAMES.
 
 ## Pending Features (Priority Order)
 See AI_Detector_Roadmap.md for full details. Top priority:
@@ -124,10 +162,14 @@ clever one-liners. Document what each detection check does and why.
 ## Session Startup Checklist
 When starting a new Claude Code session:
 1. Read index.html to understand current state
-2. Check AI_Detector_Roadmap.md for pending features
+2. Check GAMEPLAN.md for the current roadmap (AI_Detector_Roadmap.md is older background)
 3. Ask what the user wants to work on
 4. Make targeted edits — never rewrite large sections unnecessarily
-5. Test by opening index.html in browser after changes
+5. Verify after changes:
+   - Syntax: extract the `<script>` block and compile with `node` + `vm.Script`
+   - Detection intact: `node raid_eval/node_runner.js` on a sample (stubs the DOM)
+   - UI: a static server + the Claude Preview MCP (fill #docInput, click #analyzeBtn,
+     check console errors, screenshot) — beats eyeballing a static screenshot
 6. Commit with descriptive message when feature is complete
 
 ## Coding Guidelines

@@ -3,21 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deep AI Detection Analysis</title>
+<title>AI Origin Detector — Forensic Analysis Console</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap');
 
   :root {
-    --bg: #0a0a0f;
-    --surface: #111118;
-    --card: #16161f;
-    --border: #2a2a3a;
-    --accent: #00ff9d;
-    --accent2: #ff3c6e;
-    --accent3: #7b61ff;
-    --text: #e8e8f0;
-    --muted: #6b6b8a;
-    --warn: #ffaa00;
+    /* Premium dark — restrained, less neon */
+    --bg:      #0b0d12;
+    --panel:   #13161e;
+    --panel-2: #181c26;
+    --surface: #13161e;
+    --card:    #13161e;
+    --border:  #242a37;
+    --line-2:  #2f3646;
+    --text:    #e8eaf1;
+    --muted:   #8990a3;
+    --faint:   #5c6275;
+    --brand:   #5b8def;   /* chrome accent (indigo-blue) */
+    --ai:      #ef5a78;   /* AI-leaning (rose) */
+    --human:   #2dd4a7;   /* human-leaning (teal) */
+    --warn:    #e6a94e;   /* caution (amber) */
+    /* legacy aliases used by render functions */
+    --accent:  #2dd4a7;   /* "clean / good" */
+    --accent2: #ef5a78;   /* "suspicious / AI" */
+    --accent3: #5b8def;   /* secondary panel accent */
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -25,683 +34,196 @@
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Space Mono', monospace;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* animated grid bg */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(0,255,157,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,255,157,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 40px 24px 80px;
-    position: relative;
-    z-index: 1;
-  }
-
-  header {
-    margin-bottom: 48px;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 32px;
-  }
-
-  .badge {
-    display: inline-block;
-    font-size: 10px;
-    letter-spacing: 0.2em;
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    padding: 3px 10px;
-    margin-bottom: 16px;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    font-family: 'Syne', sans-serif;
-    font-size: clamp(28px, 5vw, 52px);
-    font-weight: 800;
-    line-height: 1.05;
-    letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #fff 0%, var(--accent) 60%, var(--accent3) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .subtitle {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 10px;
-    letter-spacing: 0.05em;
-    line-height: 1.8;
-  }
-
-  .input-zone {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0;
-    margin-bottom: 24px;
-    transition: border-color 0.2s;
-    position: relative;
-  }
-
-  .input-zone:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px rgba(0,255,157,0.15), 0 0 40px rgba(0,255,157,0.05);
-  }
-
-  .input-label {
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    color: var(--muted);
-    padding: 14px 20px 0;
-    text-transform: uppercase;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  #wordCount {
-    color: var(--accent);
-    font-size: 10px;
-  }
-
-  textarea {
-    width: 100%;
-    min-height: 220px;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--text);
-    font-family: 'Space Mono', monospace;
-    font-size: 13px;
-    line-height: 1.8;
-    padding: 14px 20px 20px;
-    resize: vertical;
-  }
-
-  textarea::placeholder { color: var(--muted); }
-
-  .btn {
-    width: 100%;
-    padding: 18px;
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    font-family: 'Syne', sans-serif;
-    font-size: 15px;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    cursor: pointer;
-    border-radius: 4px;
-    transition: all 0.2s;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .btn:hover { background: #00ffb3; transform: translateY(-1px); box-shadow: 0 8px 30px rgba(0,255,157,0.25); }
-  .btn:active { transform: translateY(0); }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-  .btn-inner { position: relative; z-index: 1; }
-
-  /* RESULTS */
-  #results { display: none; animation: fadeUp 0.5s ease forwards; }
-
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .verdict-banner {
-    border-radius: 4px;
-    padding: 28px 32px;
-    margin-bottom: 32px;
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    border: 1px solid;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .verdict-banner::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    opacity: 0.06;
-  }
-
-  .verdict-banner.ai {
-    border-color: var(--accent2);
-    background: rgba(255,60,110,0.08);
-  }
-  .verdict-banner.ai::before { background: var(--accent2); }
-
-  .verdict-banner.human {
-    border-color: var(--accent);
-    background: rgba(0,255,157,0.06);
-  }
-  .verdict-banner.human::before { background: var(--accent); }
-
-  .verdict-banner.mixed {
-    border-color: var(--warn);
-    background: rgba(255,170,0,0.06);
-  }
-  .verdict-banner.mixed::before { background: var(--warn); }
-
-  .verdict-icon { font-size: 48px; flex-shrink: 0; }
-
-  .verdict-text h2 {
-    font-family: 'Syne', sans-serif;
-    font-size: 24px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
-
-  .verdict-text p { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.6; }
-
-  .score-ring-wrap {
-    margin-left: auto;
-    flex-shrink: 0;
-    text-align: center;
-  }
-
-  .score-ring {
-    width: 90px;
-    height: 90px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Syne', sans-serif;
-    font-size: 26px;
-    font-weight: 800;
-    border: 3px solid;
-    flex-direction: column;
-  }
-
-  .score-ring .ring-label { font-size: 8px; font-family: 'Space Mono', monospace; letter-spacing: 0.1em; margin-top: 2px; }
-
-  .score-ring.ai { border-color: var(--accent2); color: var(--accent2); }
-  .score-ring.human { border-color: var(--accent); color: var(--accent); }
-  .score-ring.mixed { border-color: var(--warn); color: var(--warn); }
-
-  /* Metric grid */
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 32px;
-  }
-
-  @media (max-width: 600px) { .metrics-grid { grid-template-columns: 1fr; } }
-
-  .metric-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 20px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .metric-card::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: var(--accent);
-  }
-
-  .metric-card.warn::after { background: var(--accent2); }
-  .metric-card.caution::after { background: var(--warn); }
-  .metric-card.ok::after { background: var(--accent); }
-
-  .metric-name {
-    font-size: 9px;
-    letter-spacing: 0.18em;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .metric-name .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .metric-value {
-    font-family: 'Syne', sans-serif;
-    font-size: 28px;
-    font-weight: 800;
-    line-height: 1;
-    margin-bottom: 8px;
-  }
-
-  .metric-bar-wrap {
-    background: var(--border);
-    height: 3px;
-    border-radius: 2px;
-    margin-bottom: 10px;
-    overflow: hidden;
-  }
-
-  .metric-bar {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 1s cubic-bezier(0.4,0,0.2,1);
-  }
-
-  .metric-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
-
-  /* Signal flags */
-  .signals-section {
-    margin-bottom: 32px;
-  }
-
-  .section-title {
-    font-size: 10px;
-    letter-spacing: 0.2em;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .section-title::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-
-  .signals-list { display: flex; flex-direction: column; gap: 8px; }
-
-  .signal {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 14px 18px;
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    font-size: 12px;
+    font-family: 'Inter', system-ui, sans-serif;
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
   }
 
-  .signal-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
-  .signal-text strong { display: block; color: var(--text); font-size: 12px; margin-bottom: 2px; }
-  .signal-text span { color: var(--muted); font-size: 11px; }
+  .container { max-width: 1040px; margin: 0 auto; padding: 40px 28px 80px; }
 
-  /* Analysis log */
-  .log-section { margin-bottom: 32px; }
+  /* ---- Header ---- */
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 32px; }
+  .h-left .eyebrow { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.22em; color: var(--brand); text-transform: uppercase; }
+  h1 { font-family: 'Syne', sans-serif; font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin-top: 8px; line-height: 1.05; }
+  .h-left p { font-size: 13px; color: var(--muted); margin-top: 8px; max-width: 480px; }
+  .model-badge { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); border: 1px solid var(--line-2); border-radius: 6px; padding: 8px 12px; white-space: nowrap; line-height: 1.7; text-align: right; }
+  .model-badge b { color: var(--human); font-weight: 700; }
 
-  .log-box {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 20px;
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 2;
-    max-height: 300px;
-    overflow-y: auto;
-  }
+  /* ---- Input ---- */
+  .input-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 14px; }
+  .input-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .input-row .lbl { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; }
+  .input-row .wc { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--brand); }
+  textarea { width: 100%; min-height: 150px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; line-height: 1.7; padding: 14px 16px; resize: vertical; outline: none; }
+  textarea:focus { border-color: var(--brand); }
+  textarea::placeholder { color: var(--faint); }
+  .btn { width: 100%; padding: 16px; background: var(--brand); color: #06121f; border: none; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 800; letter-spacing: 0.05em; cursor: pointer; transition: filter 0.15s; margin-bottom: 28px; }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  .log-line { display: flex; gap: 12px; }
-  .log-time { color: var(--accent3); flex-shrink: 0; }
-  .log-msg { }
-  .log-msg.highlight { color: var(--accent); }
-  .log-msg.warn { color: var(--accent2); }
+  /* ---- Section labels ---- */
+  .sec-label { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.2em; color: var(--faint); text-transform: uppercase; margin: 0 0 14px; display: flex; align-items: center; gap: 12px; }
+  .sec-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-  /* Loading */
-  .loading { display: none; text-align: center; padding: 48px; }
-  .loading.active { display: block; }
+  /* ---- Verdict hero ---- */
+  #results { display: none; }
+  .hero { display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 12px; padding: 26px 30px; margin-bottom: 16px; }
+  .hero.ai { border-left-color: var(--ai); }
+  .hero.human { border-left-color: var(--human); }
+  .hero.mixed { border-left-color: var(--warn); }
+  .hero h2 { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; letter-spacing: -0.01em; }
+  .hero h2 .chip { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; vertical-align: middle; margin-left: 10px; padding: 3px 9px; border-radius: 5px; letter-spacing: 0.05em; }
+  .hero.ai .chip { background: rgba(239,90,120,0.14); color: var(--ai); }
+  .hero.human .chip { background: rgba(45,212,167,0.14); color: var(--human); }
+  .hero.mixed .chip { background: rgba(230,169,78,0.14); color: var(--warn); }
+  .hero p { font-size: 13px; color: var(--muted); margin-top: 8px; max-width: 480px; line-height: 1.65; }
+  .gauge-wrap { text-align: center; }
+  .gauge-label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 0.15em; color: var(--faint); text-transform: uppercase; margin-top: 6px; }
 
-  .spinner {
-    width: 40px; height: 40px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    margin: 0 auto 16px;
-  }
+  /* ---- Layer metric cards ---- */
+  .layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 32px; }
+  .lcard { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .lcard .lk { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+  .lcard .lv { font-family: 'Syne', sans-serif; font-size: 30px; font-weight: 800; line-height: 1; margin: 10px 0 8px; }
+  .lcard .lbar { height: 4px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .lcard .lbar > span { display: block; height: 100%; border-radius: 3px; }
+  .lcard .lsub { font-size: 11px; color: var(--faint); margin-top: 8px; }
 
-  @keyframes spin { to { transform: rotate(360deg); } }
+  /* ---- Radar centerpiece ---- */
+  .radar-block { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; margin-bottom: 32px; }
+  .radar-legend { display: flex; gap: 18px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .radar-legend span { display: flex; align-items: center; gap: 7px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; }
+  .rank h3 { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .rank .rank-sub { font-size: 11px; color: var(--faint); margin-bottom: 14px; }
+  .rank-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; margin-bottom: 11px; }
+  .rank-row .rn { font-size: 12px; color: var(--text); }
+  .rank-row .rbar { grid-column: 1 / -1; height: 4px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .rank-row .rbar > span { display: block; height: 100%; border-radius: 3px; }
+  .rank-row .rv { font-family: 'Space Mono', monospace; font-size: 12px; }
 
-  .loading p { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; }
-  .loading .loading-step { color: var(--accent); margin-top: 8px; font-size: 11px; min-height: 20px; }
+  /* ---- Signal detail grid ---- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .scard { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .scard .sk { font-family: 'Space Mono', monospace; font-size: 9.5px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; display: flex; align-items: center; gap: 7px; }
+  .scard .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .scard .sv { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; margin: 8px 0 8px; line-height: 1; }
+  .scard .sbar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 9px; }
+  .scard .sbar > span { display: block; height: 100%; border-radius: 2px; }
+  .scard .sd { font-size: 10.5px; color: var(--faint); line-height: 1.5; }
 
-  .disclaimer {
-    background: rgba(123,97,255,0.08);
-    border: 1px solid rgba(123,97,255,0.2);
-    border-radius: 4px;
-    padding: 16px 20px;
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 1.7;
-    margin-bottom: 24px;
-  }
+  /* ---- Drop zone ---- */
+  .drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 28px 24px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 12px; position: relative; background: var(--panel); }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--brand); background: rgba(91,141,239,0.05); }
+  .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 26px; margin-bottom: 10px; }
+  .drop-label { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .drop-sub { font-size: 11px; color: var(--muted); }
+  .drop-accepted { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--brand); margin-top: 8px; letter-spacing: 0.1em; }
+  .file-loaded-banner { background: rgba(45,212,167,0.06); border: 1px solid rgba(45,212,167,0.25); border-radius: 8px; padding: 12px 18px; margin-bottom: 12px; display: none; align-items: center; gap: 12px; font-size: 12px; }
+  .file-loaded-banner.visible { display: flex; }
+  .file-loaded-icon { font-size: 18px; }
+  .file-loaded-name { color: var(--human); font-weight: 700; flex: 1; }
+  .file-loaded-meta { color: var(--muted); font-size: 10px; }
+  .file-clear-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-size: 10px; padding: 4px 10px; border-radius: 5px; cursor: pointer; font-family: 'Space Mono', monospace; }
+  .file-clear-btn:hover { border-color: var(--ai); color: var(--ai); }
+  .or-divider { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-family: 'Space Mono', monospace; font-size: 10px; color: var(--faint); letter-spacing: 0.1em; }
+  .or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-  .disclaimer strong { color: var(--accent3); }
-
-  /* Forensic layer */
-  .forensic-banner {
-    border-radius: 4px;
-    padding: 20px 24px;
-    margin-bottom: 32px;
-    border: 1px solid rgba(123,97,255,0.4);
-    background: rgba(123,97,255,0.07);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .forensic-banner::before {
-    content: '// LAYER 2: FORENSIC CHARACTER ANALYSIS';
-    position: absolute;
-    top: 10px; right: 16px;
-    font-size: 9px;
-    letter-spacing: 0.15em;
-    color: var(--accent3);
-    opacity: 0.6;
-  }
-
-  .forensic-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 13px;
-    font-weight: 800;
-    color: var(--accent3);
-    margin-bottom: 14px;
-    letter-spacing: 0.05em;
-  }
-
-  .forensic-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  @media (max-width: 600px) { .forensic-grid { grid-template-columns: 1fr 1fr; } }
-
-  .forensic-stat {
-    background: rgba(0,0,0,0.3);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 12px 14px;
-  }
-
-  .forensic-stat-label {
-    font-size: 9px;
-    letter-spacing: 0.12em;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
-
-  .forensic-stat-value {
-    font-family: 'Syne', sans-serif;
-    font-size: 20px;
-    font-weight: 800;
-  }
-
+  /* ---- Forensic panel (Layer 2) ---- */
+  .forensic-banner { border-radius: 10px; padding: 22px 24px; margin-bottom: 16px; border: 1px solid rgba(91,141,239,0.3); background: rgba(91,141,239,0.05); position: relative; overflow: hidden; }
+  .forensic-banner::before { content: '// LAYER 2: FORENSIC CHARACTER ANALYSIS'; position: absolute; top: 12px; right: 16px; font-size: 9px; letter-spacing: 0.15em; color: var(--accent3); opacity: 0.6; }
+  .forensic-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 800; color: var(--accent3); margin-bottom: 14px; }
+  .forensic-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .forensic-stat { background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+  .forensic-stat-label { font-size: 9px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+  .forensic-stat-value { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; }
   .forensic-stat-value.clean { color: var(--accent); }
   .forensic-stat-value.suspicious { color: var(--accent2); }
   .forensic-stat-value.caution { color: var(--warn); }
-
   .forensic-stat-sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
-
-  .char-map-wrap {
-    background: rgba(0,0,0,0.4);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 14px;
-    margin-top: 12px;
-    max-height: 220px;
-    overflow-y: auto;
-  }
-
-  .char-map-title {
-    font-size: 9px;
-    letter-spacing: 0.15em;
-    color: var(--accent3);
-    text-transform: uppercase;
-    margin-bottom: 10px;
-  }
-
-  .char-entry {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 6px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    font-size: 11px;
-  }
-
+  .char-map-wrap { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin-top: 12px; max-height: 220px; overflow-y: auto; }
+  .char-map-title { font-size: 9px; letter-spacing: 0.15em; color: var(--accent3); text-transform: uppercase; margin-bottom: 10px; }
+  .char-entry { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 11px; }
   .char-entry:last-child { border-bottom: none; }
-
-  .char-glyph {
-    font-family: 'Space Mono', monospace;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid var(--border);
-    padding: 2px 6px;
-    border-radius: 2px;
-    font-size: 11px;
-    min-width: 40px;
-    text-align: center;
-    color: var(--accent3);
-  }
-
-  .char-codepoint {
-    color: var(--muted);
-    font-size: 10px;
-    min-width: 80px;
-  }
-
+  .char-glyph { font-family: 'Space Mono', monospace; background: rgba(255,255,255,0.06); border: 1px solid var(--border); padding: 2px 6px; border-radius: 2px; font-size: 11px; min-width: 40px; text-align: center; color: var(--accent3); }
+  .char-codepoint { color: var(--muted); font-size: 10px; min-width: 80px; }
   .char-name { color: var(--text); flex: 1; }
   .char-count { color: var(--warn); font-size: 10px; }
   .char-risk { font-size: 9px; padding: 2px 6px; border-radius: 2px; border: 1px solid; }
   .char-risk.high { color: var(--accent2); border-color: var(--accent2); }
   .char-risk.med { color: var(--warn); border-color: var(--warn); }
   .char-risk.low { color: var(--muted); border-color: var(--muted); }
+  .clean-msg { font-size: 12px; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+  .forensic-verdict { margin-top: 14px; padding: 12px 16px; border-radius: 6px; font-size: 12px; line-height: 1.6; border: 1px solid; }
+  .forensic-verdict.clean { border-color: rgba(45,212,167,0.3); background: rgba(45,212,167,0.05); color: var(--accent); }
+  .forensic-verdict.suspicious { border-color: rgba(239,90,120,0.3); background: rgba(239,90,120,0.05); color: #ff8fab; }
+  .forensic-verdict.caution { border-color: rgba(230,169,78,0.3); background: rgba(230,169,78,0.05); color: var(--warn); }
 
-  .clean-msg {
-    font-size: 12px;
-    color: var(--accent);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .forensic-verdict {
-    margin-top: 14px;
-    padding: 12px 16px;
-    border-radius: 3px;
-    font-size: 12px;
-    line-height: 1.6;
-    border: 1px solid;
-  }
-
-  .forensic-verdict.clean { border-color: rgba(0,255,157,0.3); background: rgba(0,255,157,0.05); color: var(--accent); }
-  .forensic-verdict.suspicious { border-color: rgba(255,60,110,0.3); background: rgba(255,60,110,0.05); color: #ff8fab; }
-  .forensic-verdict.caution { border-color: rgba(255,170,0,0.3); background: rgba(255,170,0,0.05); color: var(--warn); }
-
-  /* Dual score display */
-  .dual-scores {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 32px;
-  }
-
-  .score-panel {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 20px;
-    text-align: center;
-  }
-
-  .score-panel-label {
-    font-size: 9px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 12px;
-  }
-
-  .score-panel-num {
-    font-family: 'Syne', sans-serif;
-    font-size: 42px;
-    font-weight: 800;
-    line-height: 1;
-  }
-
-  .score-panel-sub { font-size: 10px; color: var(--muted); margin-top: 6px; }
-
-  /* Drop zone */
-  .drop-zone {
-    border: 2px dashed var(--border);
-    border-radius: 4px;
-    padding: 32px 24px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-bottom: 12px;
-    position: relative;
-    background: var(--card);
-  }
-  .drop-zone:hover, .drop-zone.drag-over {
-    border-color: var(--accent);
-    background: rgba(0,255,157,0.04);
-    box-shadow: 0 0 30px rgba(0,255,157,0.06);
-  }
-  .drop-zone input[type=file] {
-    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
-  }
-  .drop-icon { font-size: 28px; margin-bottom: 10px; }
-  .drop-label { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
-  .drop-sub { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; }
-  .drop-accepted { font-size: 10px; color: var(--accent); margin-top: 8px; letter-spacing: 0.1em; }
-  .file-loaded-banner { background: rgba(0,255,157,0.06); border: 1px solid rgba(0,255,157,0.25); border-radius: 4px; padding: 12px 18px; margin-bottom: 12px; display: none; align-items: center; gap: 12px; font-size: 12px; }
-  .file-loaded-banner.visible { display: flex; }
-  .file-loaded-icon { font-size: 20px; }
-  .file-loaded-name { color: var(--accent); font-weight: 700; flex: 1; }
-  .file-loaded-meta { color: var(--muted); font-size: 10px; }
-  .file-clear-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-size: 10px; padding: 3px 8px; border-radius: 2px; cursor: pointer; font-family: 'Space Mono', monospace; }
-  .file-clear-btn:hover { border-color: var(--accent2); color: var(--accent2); }
-  .or-divider { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; }
-  .or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-
-  /* Metadata panel */
-  .meta-panel { background: var(--card); border: 1px solid rgba(123,97,255,0.35); border-radius: 4px; padding: 20px 24px; margin-bottom: 32px; position: relative; overflow: hidden; }
-  .meta-panel::before { content: '// FILE METADATA SCAN'; position: absolute; top: 12px; right: 16px; font-size: 9px; letter-spacing: 0.15em; color: var(--accent3); opacity: 0.5; }
-  .meta-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800; color: var(--accent3); margin-bottom: 16px; }
+  /* ---- Metadata panel (Layer 3) ---- */
+  .meta-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 800; color: var(--accent3); margin-bottom: 16px; }
   .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-  @media (max-width: 600px) { .meta-grid { grid-template-columns: 1fr; } }
-  .meta-row { background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 3px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+  .meta-row { background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
   .meta-key { font-size: 9px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
   .meta-val { font-size: 12px; color: var(--text); word-break: break-all; }
   .meta-val.flagged { color: var(--accent2); }
   .meta-val.ok { color: var(--accent); }
   .meta-val.warn { color: var(--warn); }
   .meta-flags { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
-  .meta-flag { font-size: 11px; padding: 8px 12px; border-radius: 3px; border: 1px solid; line-height: 1.5; }
-  .meta-flag.red { border-color: rgba(255,60,110,0.3); background: rgba(255,60,110,0.06); color: #ff8fab; }
-  .meta-flag.yellow { border-color: rgba(255,170,0,0.3); background: rgba(255,170,0,0.06); color: var(--warn); }
-  .meta-flag.green { border-color: rgba(0,255,157,0.3); background: rgba(0,255,157,0.06); color: var(--accent); }
+  .meta-flag { font-size: 11px; padding: 8px 12px; border-radius: 6px; border: 1px solid; line-height: 1.5; }
+  .meta-flag.red { border-color: rgba(239,90,120,0.3); background: rgba(239,90,120,0.06); color: #ff8fab; }
+  .meta-flag.yellow { border-color: rgba(230,169,78,0.3); background: rgba(230,169,78,0.06); color: var(--warn); }
+  .meta-flag.green { border-color: rgba(45,212,167,0.3); background: rgba(45,212,167,0.06); color: var(--accent); }
+  #metaPanel { margin-bottom: 16px; }
+  #layer5Panel, #monteCarloPanel { margin-bottom: 16px; }
 
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  /* Tab bar */
-  .tab-bar {
-    display: flex;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 28px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .tab-bar::-webkit-scrollbar { display: none; }
-
-  .tab-btn {
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--muted);
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    padding: 12px 20px;
-    cursor: pointer;
-    transition: color 0.2s, border-color 0.2s;
-    white-space: nowrap;
-    margin-bottom: -1px;
-    flex-shrink: 0;
-  }
-  .tab-btn:hover { color: var(--text); }
-  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-  .tab-pane { display: none; }
-  .tab-pane.active { display: block; }
-
-  /* No-file placeholder */
-  .no-file-placeholder {
-    text-align: center;
-    padding: 48px 24px;
-    border: 1px dashed var(--border);
-    border-radius: 4px;
-    color: var(--muted);
-    font-size: 12px;
-  }
-  .no-file-placeholder .placeholder-icon { font-size: 32px; margin-bottom: 12px; }
+  /* ---- No-file placeholder ---- */
+  .no-file-placeholder { text-align: center; padding: 36px 24px; border: 1px dashed var(--line-2); border-radius: 10px; color: var(--muted); font-size: 12px; }
+  .no-file-placeholder .placeholder-icon { font-size: 30px; margin-bottom: 12px; }
   .no-file-placeholder strong { display: block; color: var(--text); font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+
+  /* ---- Raw log ---- */
+  .log-box { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); line-height: 2; max-height: 320px; overflow-y: auto; }
+  .log-line { display: flex; gap: 12px; }
+  .log-time { color: var(--accent3); flex-shrink: 0; }
+  .log-msg.highlight { color: var(--accent); }
+  .log-msg.warn { color: var(--accent2); }
+
+  /* ---- Scrollbar ---- */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+
+  @media (max-width: 820px) {
+    .radar-block { grid-template-columns: 1fr; }
+    header { flex-direction: column; align-items: flex-start; }
+    .model-badge { text-align: left; }
+    .forensic-grid { grid-template-columns: 1fr 1fr; }
+    .meta-grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 <div class="container">
+
   <header>
-    <div class="badge">// Advanced Linguistic Analysis</div>
-    <h1>AI ORIGIN<br>DETECTOR</h1>
-    <p class="subtitle">
-      Multi-vector forensic analysis · Perplexity · Burstiness · Entropy · Syntax patterns<br>
-      Powered by 16 independent detection algorithms
-    </p>
+    <div class="h-left">
+      <div class="eyebrow">// Forensic Linguistic Analysis</div>
+      <h1>AI Origin Detector</h1>
+      <p>17 linguistic signals · forensic character scan · authorial fingerprinting · file metadata — all client-side, nothing uploaded.</p>
+    </div>
+    <div class="model-badge">
+      MODEL: logistic regression<br>
+      20 signals · held-out <b>F1 0.916</b><br>
+      AUC 0.964 · runs in-browser
+    </div>
   </header>
 
-  <div class="disclaimer">
-    <strong>How this works:</strong> Drop a file or paste text. Runs 16 linguistic vectors + forensic character scan + file metadata analysis entirely in your browser. Nothing is uploaded anywhere. Supports .txt, .docx, .pdf (text-based).
-  </div>
-
-  <!-- Drop zone -->
+  <!-- Input -->
   <div class="drop-zone" id="dropZone">
     <input type="file" id="fileInput" accept=".txt,.docx,.pdf,.doc,.rtf,.md" onchange="handleFileSelect(event)">
     <div class="drop-icon">📄</div>
-    <div class="drop-label">Drop a file here or click to browse</div>
+    <div class="drop-label">Drop a file or click to browse</div>
     <div class="drop-sub">File contents stay on your device — nothing is sent anywhere</div>
     <div class="drop-accepted">TXT · DOCX · PDF · MD · RTF</div>
   </div>
@@ -715,73 +237,67 @@
 
   <div class="or-divider">OR PASTE TEXT DIRECTLY</div>
 
-  <div class="input-zone">
-    <div class="input-label">
-      <span>// PASTE DOCUMENT BELOW</span>
-      <span id="wordCount">0 words</span>
+  <div class="input-wrap">
+    <div class="input-row">
+      <span class="lbl">// Paste document below</span>
+      <span class="wc" id="wordCount">0 words</span>
     </div>
-    <textarea id="docInput" placeholder="Paste your document here. Minimum 100 words recommended for accurate analysis..."></textarea>
+    <textarea id="docInput" placeholder="Paste your document here. Minimum 30 words required for analysis..."></textarea>
   </div>
 
-  <button class="btn" id="analyzeBtn" onclick="runAnalysis()">
-    <span class="btn-inner">⟶ Run Deep Analysis</span>
-  </button>
-
-  <div class="loading" id="loading">
-    <div class="spinner"></div>
-    <p>RUNNING FORENSIC ANALYSIS</p>
-    <div class="loading-step" id="loadingStep">Initializing...</div>
-  </div>
+  <button class="btn" id="analyzeBtn" onclick="runAnalysis()">⟶ Run Analysis</button>
 
   <div id="results">
-    <div class="verdict-banner" id="verdictBanner">
-      <div class="verdict-icon" id="verdictIcon"></div>
-      <div class="verdict-text">
+    <!-- Verdict hero -->
+    <div class="sec-label">Verdict</div>
+    <div class="hero" id="verdictHero">
+      <div>
         <h2 id="verdictTitle"></h2>
         <p id="verdictSub"></p>
       </div>
-      <div class="score-ring-wrap">
-        <div class="score-ring" id="scoreRing">
-          <span id="scoreNum"></span>
-          <span class="ring-label">AI SCORE</span>
+      <div class="gauge-wrap">
+        <svg id="gauge" width="132" height="132" viewBox="0 0 132 132" role="img" aria-label="Combined AI score"></svg>
+        <div class="gauge-label">Combined AI score</div>
+      </div>
+    </div>
+
+    <!-- Layer breakdown -->
+    <div class="layers" id="layerCards"></div>
+
+    <!-- Radar centerpiece -->
+    <div class="sec-label">Signal radar — 17 vectors</div>
+    <div class="radar-block">
+      <div>
+        <div class="radar-legend">
+          <span><span class="swatch" style="background:var(--ai)"></span>This document</span>
+          <span><span class="swatch" style="background:var(--faint)"></span>Human reference</span>
         </div>
+        <svg id="radar" width="100%" viewBox="0 0 480 440" role="img" aria-label="Radar chart of 17 detection signals versus human reference"></svg>
+      </div>
+      <div class="rank">
+        <h3>Top contributing signals</h3>
+        <div class="rank-sub">Largest deviation from human reference</div>
+        <div id="rankList"></div>
       </div>
     </div>
 
-    <!-- Tab navigation -->
-    <div class="tab-bar">
-      <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
-      <button class="tab-btn" data-tab="linguistic" onclick="switchTab('linguistic')">Signals</button>
-      <button class="tab-btn" data-tab="forensic" onclick="switchTab('forensic')">Forensic</button>
-    </div>
+    <!-- Signal detail grid -->
+    <div class="sec-label">All signals</div>
+    <div class="grid" id="sigGrid"></div>
 
-    <!-- Overview: score panels + signals + authorial consistency -->
-    <div class="tab-pane active" id="tab-overview">
-      <div class="dual-scores" id="dualScores"></div>
-      <div class="signals-section">
-        <div class="section-title">Detected Signals</div>
-        <div class="signals-list" id="signalsList"></div>
-      </div>
-      <div id="layer5Panel"></div>
-    </div>
+    <!-- Deeper analysis -->
+    <div class="sec-label">Deeper analysis</div>
+    <div class="forensic-banner" id="forensicBanner"></div>
+    <div id="layer5Panel"></div>
+    <div id="monteCarloPanel"></div>
+    <div id="metaPanel"></div>
 
-    <!-- Signals: detailed per-signal metric cards -->
-    <div class="tab-pane" id="tab-linguistic">
-      <div class="metrics-grid" id="metricsGrid"></div>
-    </div>
-
-    <!-- Forensic: character scan + file metadata -->
-    <div class="tab-pane" id="tab-forensic">
-      <div class="forensic-banner" id="forensicBanner"></div>
-      <div id="metaPanel"></div>
-    </div>
-
-    <!-- Hidden: kept for JS compatibility, not shown to users -->
-    <div style="display:none">
-      <div id="monteCarloPanel"></div>
-      <div id="logBox"></div>
+    <div class="log-section">
+      <div class="sec-label">Raw analysis log</div>
+      <div class="log-box" id="logBox"></div>
     </div>
   </div>
+
 </div>
 
 <script>
@@ -812,7 +328,7 @@ function clearFile() {
   document.getElementById('fileInput').value = '';
   document.getElementById('fileLoadedBanner').classList.remove('visible');
   document.getElementById('docInput').value = '';
-  document.getElementById('docInput').placeholder = 'Paste your document here. Minimum 100 words recommended for accurate analysis...';
+  document.getElementById('docInput').placeholder = 'Paste your document here. Minimum 30 words required for analysis...';
   document.getElementById('wordCount').textContent = '0 words';
   fileMetadata = null;
   fileText = '';
@@ -2549,39 +2065,12 @@ async function runAnalysis() {
   // Run authorial consistency layer
   const layer5 = runAuthoralConsistency(text);
 
-  // Weights ported from raid_eval/detector.py — tuned via RAID gap analysis
-  // (liamdugan/raid, 500 samples: Accuracy 88.0%, Precision 96.7%, F1 0.907).
-  // Zero-weighted signals had negative or near-zero TP-vs-FN discrimination gaps;
-  // they are still computed for display but do not affect the score.
-  // Total = 1.0 across 18 slots.
-  const weights = [
-    0.00, // perplexity proxy      — cut: gap +1.4, noise
-    0.11, // burstiness            — gap +20.3, strong structural signal
-    0.13, // lexical diversity     — gap +34.3, single biggest discriminator
-    0.07, // AI phrases            — gap +7.4, catches naive AI
-    0.00, // hedging               — cut: gap -3.0, inverted (hurts recall)
-    0.00, // passive voice         — cut: gap +0.6, random noise
-    0.00, // transitions           — cut: gap -10.6, strongly inverted on MPT/Llama
-    0.02, // clause depth
-    0.07, // punctuation variance  — gap +6.4
-    0.12, // paragraph uniformity  — gap +26.6, reliable across all model families
-    0.05, // rare words            — gap +26.3
-    0.12, // register stability    — gap +19.9, top signal across all model families
-    0.04, // n-gram repetition     — gap +20.5
-    0.08, // sentence opener div   — gap +27.5 (1-word opener fix)
-    0.04, // punctuation fingerprint — gap +3.8, weak
-    0.07, // vocab clustering      — gap +24.3
-    0.03, // density melody        — gap +3.6, weak
-    0.05, // ensemble mean slot    — mean of the other 17 signals (mild stabilizer)
-  ];
-  const scores = [perplexity.score, burstiness, lexical, aiPhrases, hedging, passive, transitions,
-    clauseDepth, punctuation, paraUniformity, rareWords, formality,
-    ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody, 0];
-  scores[17] = scores.slice(0, 17).reduce((a, b) => a + b, 0) / 17;
-
   // Layer-1 score from the trained classifier (eval/model.json).
-  // CV F1 0.773 vs 0.604 for the old hand-tuned weighted sum.
-  const composite = Math.round(classifierL1(scores.slice(0, 17)));
+  // CV F1 0.773 — logistic regression over 17 linguistic signals.
+  const l1Features = [perplexity.score, burstiness, lexical, aiPhrases, hedging, passive, transitions,
+    clauseDepth, punctuation, paraUniformity, rareWords, formality,
+    ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody];
+  const composite = Math.round(classifierL1(l1Features));
   const aiScore = composite;
 
   // Combined score — Phase 3 learned model. Logistic regression over all 20
@@ -2645,139 +2134,126 @@ async function runAnalysis() {
     combinedScore * (fileMetadata ? 0.85 : 1.0) + (fileMetadata ? metaBoost : 0)
   ));
 
-  // Verdict
-  const banner = document.getElementById('verdictBanner');
-  const icon = document.getElementById('verdictIcon');
-  const title = document.getElementById('verdictTitle');
-  const sub = document.getElementById('verdictSub');
-  const ring = document.getElementById('scoreRing');
-  const num = document.getElementById('scoreNum');
+  // ─── Verdict + radial gauge ────────────────────────────────
+  const COL = { text: '#e8eaf1', muted: '#8990a3', faint: '#5c6275', track: '#242a37', ai: '#ef5a78', human: '#2dd4a7', warn: '#e6a94e' };
+  const colorHex = v => v >= 65 ? COL.ai : v >= 45 ? COL.warn : COL.human;
 
-  let cls, iconStr, titleStr, subStr;
-
+  let cls, titleStr, subStr, chipLabel, verdictHex;
   if (trueCombined >= 60) {
-    cls = 'ai';
-    iconStr = '🤖';
+    cls = 'ai'; chipLabel = 'AI'; verdictHex = COL.ai;
     titleStr = 'Likely AI-Generated';
-    subStr = `${trueCombined}% combined confidence across all layers. Strong AI signals detected in linguistic patterns${forensic.score >= 20 ? ', forensic character encoding' : ''}${fileMetadata && metaAnalysis.metaAiScore >= 20 ? ', and file metadata' : ''}. High regularity in sentence rhythm, phrase patterns, and stylistic register indicate machine authorship.`;
+    subStr = `${trueCombined}% combined confidence across all layers. Strong AI signals in sentence rhythm, phrase patterns, and stylistic register${forensic.score >= 20 ? ', plus forensic character anomalies' : ''}${fileMetadata && metaAnalysis.metaAiScore >= 20 ? ', and file metadata' : ''}.`;
   } else if (trueCombined >= 40) {
-    cls = 'mixed';
-    iconStr = '⚠️';
+    cls = 'mixed'; chipLabel = 'MIXED'; verdictHex = COL.warn;
     titleStr = 'Ambiguous / Mixed Origin';
-    subStr = `${trueCombined}% combined AI confidence. Signals are mixed. This may be AI-assisted human writing, heavily edited AI output, or a human writer with a formal structured style. Inconclusive.`;
+    subStr = `${trueCombined}% combined AI confidence. Signals are mixed — possibly AI-assisted human writing, edited AI output, or a disciplined formal writer. Inconclusive.`;
   } else {
-    cls = 'human';
-    iconStr = '✍️';
+    cls = 'human'; chipLabel = 'HUMAN'; verdictHex = COL.human;
     titleStr = 'Likely Human-Written';
-    subStr = `${trueCombined}% combined AI confidence. Most signals across all layers point to human authorship — natural burstiness, register variation, clean character encoding, and authentic stylistic irregularities detected.`;
+    subStr = `${trueCombined}% combined AI confidence. Most signals point to human authorship — natural burstiness, register variation, clean encoding, and authentic stylistic irregularity.`;
   }
 
-  banner.className = `verdict-banner ${cls}`;
-  ring.className = `score-ring ${cls}`;
-  icon.textContent = iconStr;
-  title.textContent = titleStr;
-  sub.textContent = subStr;
-  num.textContent = trueCombined + '%';
+  document.getElementById('verdictHero').className = `hero ${cls}`;
+  document.getElementById('verdictTitle').innerHTML = `${titleStr} <span class="chip">${chipLabel}</span>`;
+  document.getElementById('verdictSub').textContent = subStr;
 
-  // Score panels — 3-column grid (L1, L2, L5), L3 spans full when file loaded
-  const dualEl = document.getElementById('dualScores');
-  dualEl.style.gridTemplateColumns = 'repeat(3, 1fr)';
-  dualEl.innerHTML = `
-    <div class="score-panel">
-      <div class="score-panel-label">// Layer 1 — Linguistic</div>
-      <div class="score-panel-num" style="color:${aiScore >= 60 ? 'var(--accent2)' : aiScore >= 40 ? 'var(--warn)' : 'var(--accent)'}">${aiScore}%</div>
-      <div class="score-panel-sub">17 linguistic + Monte Carlo vectors</div>
-    </div>
-    <div class="score-panel">
-      <div class="score-panel-label">// Layer 2 — Forensic</div>
-      <div class="score-panel-num" style="color:${forensic.score >= 30 ? 'var(--accent2)' : forensic.score >= 10 ? 'var(--warn)' : 'var(--accent)'}">${forensic.score}%</div>
-      <div class="score-panel-sub">Character & encoding scan</div>
-    </div>
-    <div class="score-panel">
-      <div class="score-panel-label">// Layer 5 — Consistency</div>
-      <div class="score-panel-num" style="color:${layer5.score >= 60 ? 'var(--accent2)' : layer5.score >= 35 ? 'var(--warn)' : 'var(--accent)'}">${layer5.score}%</div>
-      <div class="score-panel-sub">Micro-habit fingerprinting · 5 signals</div>
-    </div>
-    ${fileMetadata ? `
-    <div class="score-panel" style="grid-column: 1 / -1;">
-      <div class="score-panel-label">// Layer 3 — File Metadata</div>
-      <div class="score-panel-num" style="color:${metaAnalysis.metaAiScore >= 40 ? 'var(--accent2)' : metaAnalysis.metaAiScore >= 15 ? 'var(--warn)' : 'var(--accent)'}">${metaAnalysis.metaAiScore}%</div>
-      <div class="score-panel-sub">Author · timestamps · edit history · revision markers</div>
-    </div>` : ''}
-  `;
+  // Radial gauge — combined score (hex fills: SVG presentation attrs don't resolve CSS vars)
+  (function () {
+    const R = 52, cx = 66, cy = 66, circ = 2 * Math.PI * R;
+    document.getElementById('gauge').innerHTML =
+      `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${COL.track}" stroke-width="10"/>` +
+      `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${verdictHex}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - trueCombined / 100)}" transform="rotate(-90 ${cx} ${cy})"/>` +
+      `<text x="${cx}" y="${cy - 2}" text-anchor="middle" font-family="Syne, sans-serif" font-size="30" font-weight="800" fill="${COL.text}">${trueCombined}</text>` +
+      `<text x="${cx}" y="${cy + 18}" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" fill="${COL.muted}">%  AI</text>`;
+  })();
 
-  // Metrics
-
-  const metrics = [
-    { name: 'Sentence Burstiness', value: burstiness, desc: 'Variance in sentence length. AI text is flat; humans burst.', unit: '%' },
-    { name: 'AI Phrase Density', value: aiPhrases, desc: `Found ${phrasesFound.length} known AI phrases: ${phrasesFound.slice(0,3).join(', ')}${phrasesFound.length > 3 ? '...' : ''}`, unit: '%' },
-    { name: 'Perplexity Score', value: perplexity.score, desc: `2-proxy ensemble: syllable density · sentence-length entropy · ${perplexity.validProxyCount}/2 active · agreement ${perplexity.agreement}%`, unit: '%' },
-    { name: 'Lexical Diversity', value: lexical, desc: 'Unique word ratio. AI repeats vocabulary more.', unit: '%' },
-    { name: 'Transition Uniformity', value: transitions, desc: 'Density of linking phrases. AI overuses them structurally.', unit: '%' },
-    { name: 'Register Stability', value: formality, desc: 'How fixed the formality level is. Humans shift register.', unit: '%' },
-    { name: 'Paragraph Uniformity', value: paraUniformity, desc: 'AI paragraphs are consistently similar in length.', unit: '%' },
-    { name: 'Passive Voice Rate', value: passive, desc: 'AI tends to use more passive constructions.', unit: '%' },
-    { name: 'N-gram Repetition', value: ngramRep, desc: 'AI repeats 3-word sequences even in casual writing. Humans almost never do.', unit: '%' },
-    { name: 'Opener Diversity', value: openerDiv, desc: 'AI starts sentences with structurally similar patterns repeatedly.', unit: '%' },
-    { name: 'Punctuation Fingerprint', value: punctFinger, desc: 'Em-dash overuse and parenthetical uniformity — classic AI stylistic habits.', unit: '%' },
-    { name: 'Vocab Clustering', value: vocabCluster, desc: 'AI spreads domain terms evenly. Humans cluster them around key points.', unit: '%' },
-    { name: 'Density Melody', value: densityMelody, desc: 'AI distributes information weight uniformly across a document. Human writing spikes at core arguments and flattens at transitions.', unit: '%', subInfo: densityMelodyEnsemble.validRuns > 0 ? `${densityMelodyEnsemble.validRuns}/5 runs · ${densityMelodyEnsemble.agreement}% agree · ${densityMelodyEnsemble.label}` : '0/5 runs · insufficient text' },
+  // ─── Layer breakdown cards ─────────────────────────────────
+  const layerCards = [
+    { k: 'Layer 1 — Linguistic',  v: aiScore,        sub: '17 signals · classifier F1 0.773' },
+    { k: 'Layer 2 — Forensic',    v: forensic.score, sub: 'Character & encoding scan' },
+    { k: 'Layer 5 — Consistency', v: layer5.score,   sub: 'Micro-habit fingerprint · 5 signals' },
   ];
-
-  const grid = document.getElementById('metricsGrid');
-  grid.innerHTML = metrics.map(m => {
-    const lv = getLevel(m.value);
-    const color = getLevelColor(lv);
-    return `
-      <div class="metric-card ${lv}">
-        <div class="metric-name">
-          <span class="dot" style="background:${color}"></span>
-          ${m.name}
-        </div>
-        <div class="metric-value" style="color:${color}">${Math.round(m.value)}${m.unit}</div>
-        <div class="metric-bar-wrap">
-          <div class="metric-bar" style="width:${m.value}%;background:${color}"></div>
-        </div>
-        ${m.subInfo ? `<div style="font-size:0.70rem;color:#888;margin:5px 0 2px;letter-spacing:0.01em">${m.subInfo}</div>` : ''}
-        <div class="metric-desc">${m.desc}</div>
-      </div>`;
+  if (fileMetadata) layerCards.push({ k: 'Layer 3 — File Metadata', v: metaAnalysis.metaAiScore, sub: 'Author · timestamps · revision markers' });
+  document.getElementById('layerCards').innerHTML = layerCards.map(L => {
+    const c = colorHex(L.v);
+    return `<div class="lcard">
+      <div class="lk">${L.k}</div>
+      <div class="lv" style="color:${c}">${L.v}%</div>
+      <div class="lbar"><span style="width:${L.v}%;background:${c}"></span></div>
+      <div class="lsub">${L.sub}</div>
+    </div>`;
   }).join('');
 
-  // Signals
-  const signals = [];
-  if (burstiness > 65) signals.push({ icon: '🔴', title: 'Flat sentence rhythm detected', detail: 'Sentence lengths are unusually uniform — characteristic of LLM output.' });
-  if (aiPhrases > 40) signals.push({ icon: '🔴', title: `${phrasesFound.length} AI fingerprint phrases found`, detail: `Flagged: "${phrasesFound.slice(0,5).join('", "')}"` });
-  if (ngramRep > 50) signals.push({ icon: '🔴', title: 'High n-gram repetition', detail: 'Repeated 3-word sequences detected — AI repeats phrases even in casual text.' });
-  if (openerDiv > 60) signals.push({ icon: '🔴', title: 'Sentence openers are structurally repetitive', detail: 'Multiple sentences begin with the same word patterns — a strong AI tell.' });
-  if (punctFinger > 50) signals.push({ icon: '🟠', title: 'AI punctuation fingerprint', detail: 'Em-dash overuse or parenthetical uniformity detected — hallmark AI stylistic habits.' });
-  if (vocabCluster > 65) signals.push({ icon: '🟠', title: 'Domain terms distributed too evenly', detail: 'Key vocabulary is spread uniformly — AI distributes terms; humans cluster them.' });
-  if (densityMelody > 65) signals.push({ icon: '🟠', title: `Flat information density melody (${densityMelodyEnsemble.label})`, detail: `Formal vocabulary is distributed uniformly throughout — AI maintains even information density without argument-driven peaks. ${densityMelodyEnsemble.validRuns}/5 ensemble runs agree.` });
-  if (perplexity.score > 65) signals.push({ icon: '🟠', title: 'Predictable word choices', detail: 'Vocabulary shows low entropy — words are highly predictable in sequence.' });
-  if (paraUniformity > 65) signals.push({ icon: '🟠', title: 'Paragraph length uniformity', detail: 'Paragraphs are suspiciously similar in length — AI tends to pad evenly.' });
-  if (transitions > 55) signals.push({ icon: '🟠', title: 'Over-structured transitions', detail: 'Heavy use of linking language suggests structured generation.' });
-  if (formality > 65) signals.push({ icon: '🟠', title: 'Zero register shift', detail: 'Writing stays in one formal register throughout — humans vary naturally.' });
-  if (burstiness < 35) signals.push({ icon: '🟢', title: 'Strong sentence burstiness', detail: 'High variance in sentence length is a positive human signal.' });
-  if (ngramRep < 15) signals.push({ icon: '🟢', title: 'Low n-gram repetition', detail: 'No repeated 3-word sequences — consistent with natural human writing.' });
-  if (openerDiv < 25) signals.push({ icon: '🟢', title: 'Diverse sentence openers', detail: 'Sentences begin in varied ways — strong human authorship signal.' });
-  if (vocabCluster < 30) signals.push({ icon: '🟢', title: 'Natural vocabulary clustering', detail: 'Domain terms cluster around specific points — human writing pattern.' });
-  if (aiPhrases < 15) signals.push({ icon: '🟢', title: 'No AI phrase patterns', detail: 'No known LLM fingerprint phrases detected in this document.' });
-  if (formality < 30) signals.push({ icon: '🟢', title: 'Natural register variation', detail: 'Writing shifts between formal and informal — very human pattern.' });
-  if (lexical < 30) signals.push({ icon: '🟢', title: 'High lexical diversity', detail: 'Strong unique word ratio — human writers naturally vary vocabulary more.' });
-  if (layer5.score >= 60) signals.push({ icon: '🔴', title: 'Highly consistent micro-habits', detail: 'Stylistic habits (contractions, punctuation, openers) are unnaturally uniform — a strong AI consistency signal.' });
-  if (layer5.score < 25) signals.push({ icon: '🟢', title: 'Natural micro-habit variation', detail: 'Contraction use, punctuation habits, and opener patterns vary naturally across the document.' });
-  if (monteCarlo.mixed) signals.push({ icon: '🔴', title: 'Mixed-origin text detected', detail: `Monte Carlo sampling found high score variance (range: ${monteCarlo.range}%, σ: ${monteCarlo.stdDev}%) — document sections have inconsistent AI-probability profiles, suggesting AI/human stitching.` });
-  if (monteCarlo.consistency >= 80 && monteCarlo.mean >= 65) signals.push({ icon: '🔴', title: 'AI-consistent across all sampled sections', detail: `Monte Carlo: mean ${monteCarlo.mean}%, consistency ${monteCarlo.consistency}% across ${monteCarlo.validSamples} samples — document scores uniformly high throughout.` });
-  if (monteCarlo.consistency >= 80 && monteCarlo.mean <= 35) signals.push({ icon: '🟢', title: 'Human-consistent across all sampled sections', detail: `Monte Carlo: mean ${monteCarlo.mean}%, consistency ${monteCarlo.consistency}% across ${monteCarlo.validSamples} samples — all sections score low, consistent with natural human writing.` });
-  if (signals.length === 0) signals.push({ icon: '⚪', title: 'No strong signals in either direction', detail: 'Analysis is inconclusive — signals balance each other out.' });
+  // ─── Signal radar + detail grid ───────────────────────────
+  // 17 linguistic signals in classifier-input order. Every value is oriented
+  // as AI-likelihood (0 = human-typical, 100 = AI-typical), so a larger
+  // polygon = more machine-like. Plotted against a flat human reference band.
+  const SIGNALS = [
+    { n: 'Perplexity',           s: 'Perplex.',   v: perplexity.score, d: `Word-choice predictability · 2-proxy ensemble · agreement ${perplexity.agreement}%` },
+    { n: 'Burstiness',           s: 'Burstiness', v: burstiness,       d: 'Sentence-length variance. AI is flat; humans burst.' },
+    { n: 'Lexical Diversity',    s: 'Lexical',    v: lexical,          d: 'Unique-word ratio. AI repeats vocabulary more.' },
+    { n: 'AI Phrase Density',    s: 'AI phrases', v: aiPhrases,        d: `${phrasesFound.length} known AI phrases found${phrasesFound.length ? ': ' + phrasesFound.slice(0,3).join(', ') : ''}` },
+    { n: 'Hedging Density',      s: 'Hedging',    v: hedging,          d: 'Hedge-word frequency. AI hedges at a steady rate.' },
+    { n: 'Passive Voice',        s: 'Passive',    v: passive,          d: 'Passive-construction rate. AI leans passive.' },
+    { n: 'Transition Uniformity',s: 'Transitions',v: transitions,      d: 'Linking-phrase density. AI over-structures.' },
+    { n: 'Clause Depth',         s: 'Clause',     v: clauseDepth,      d: 'Nested-clause complexity uniformity.' },
+    { n: 'Punctuation Variance', s: 'Punct var',  v: punctuation,      d: 'Variety of punctuation marks used.' },
+    { n: 'Paragraph Uniformity', s: 'Para unif.', v: paraUniformity,   d: 'Paragraph-length similarity. AI pads evenly.' },
+    { n: 'Rare Word Profile',    s: 'Rare words', v: rareWords,        d: 'Uncommon-vocabulary presence. AI avoids rare words.' },
+    { n: 'Register Stability',   s: 'Register',   v: formality,        d: 'Formality stability. Humans shift register.' },
+    { n: 'N-gram Repetition',    s: 'N-gram',     v: ngramRep,         d: 'Repeated 3-word sequences. Rare in human writing.' },
+    { n: 'Opener Diversity',     s: 'Openers',    v: openerDiv,        d: 'Sentence-opener variety. AI repeats patterns.' },
+    { n: 'Punctuation FP',       s: 'Punct fp',   v: punctFinger,      d: 'Em-dash & parenthetical stylistic habits.' },
+    { n: 'Vocab Clustering',     s: 'Vocab',      v: vocabCluster,     d: 'AI spreads domain terms evenly; humans cluster.' },
+    { n: 'Density Melody',       s: 'Density',    v: densityMelody,    d: `Information-weight melody · ${densityMelodyEnsemble.validRuns}/5 runs · ${densityMelodyEnsemble.label}` },
+  ];
+  const HUMAN_REF = 35; // illustrative human-typical level on each axis
 
-  document.getElementById('signalsList').innerHTML = signals.map(s => `
-    <div class="signal">
-      <span class="signal-icon">${s.icon}</span>
-      <div class="signal-text">
-        <strong>${s.title}</strong>
-        <span>${s.detail}</span>
-      </div>
-    </div>`).join('');
+  // Radar (inline SVG, zero deps)
+  (function () {
+    const N = SIGNALS.length, cx = 240, cy = 205, R = 140, labelPad = 20;
+    const ang = i => (-90 + i * 360 / N) * Math.PI / 180;
+    const pt = (i, val) => [cx + (val / 100) * R * Math.cos(ang(i)), cy + (val / 100) * R * Math.sin(ang(i))];
+    let s = '';
+    [25, 50, 75, 100].forEach(lvl => {
+      s += `<polygon points="${SIGNALS.map((_, i) => pt(i, lvl).join(',')).join(' ')}" fill="none" stroke="${COL.track}" stroke-width="1"/>`;
+    });
+    SIGNALS.forEach((sig, i) => {
+      const [ex, ey] = pt(i, 100);
+      s += `<line x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="${COL.track}" stroke-width="1"/>`;
+      const [lx, ly] = pt(i, 100 + labelPad / R * 100);
+      const ca = Math.cos(ang(i));
+      const anchor = ca > 0.3 ? 'start' : ca < -0.3 ? 'end' : 'middle';
+      s += `<text x="${lx}" y="${ly + 3}" text-anchor="${anchor}" font-family="Space Mono, monospace" font-size="9.5" fill="${COL.muted}">${sig.s}</text>`;
+    });
+    s += `<polygon points="${SIGNALS.map((_, i) => pt(i, HUMAN_REF).join(',')).join(' ')}" fill="none" stroke="${COL.faint}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    s += `<polygon points="${SIGNALS.map((sig, i) => pt(i, sig.v).join(',')).join(' ')}" fill="rgba(239,90,120,0.14)" stroke="${COL.ai}" stroke-width="2"/>`;
+    SIGNALS.forEach((sig, i) => { const [x, y] = pt(i, sig.v); s += `<circle cx="${x}" cy="${y}" r="2.5" fill="${COL.ai}"/>`; });
+    document.getElementById('radar').innerHTML = s;
+  })();
+
+  // Top contributing signals — largest deviation above the human reference
+  const ranked = SIGNALS.map(sig => ({ ...sig, dev: sig.v - HUMAN_REF }))
+    .sort((a, b) => b.dev - a.dev).slice(0, 5);
+  document.getElementById('rankList').innerHTML = ranked.map(r => {
+    const c = colorHex(r.v);
+    return `<div class="rank-row">
+      <span class="rn">${r.n}</span>
+      <span class="rv" style="color:${c}">${Math.round(r.v)}%</span>
+      <div class="rbar"><span style="width:${r.v}%;background:${c}"></span></div>
+    </div>`;
+  }).join('');
+
+  // Full signal grid
+  document.getElementById('sigGrid').innerHTML = SIGNALS.map(sig => {
+    const c = colorHex(sig.v);
+    return `<div class="scard">
+      <div class="sk"><span class="dot" style="background:${c}"></span>${sig.n}</div>
+      <div class="sv" style="color:${c}">${Math.round(sig.v)}%</div>
+      <div class="sbar"><span style="width:${sig.v}%;background:${c}"></span></div>
+      <div class="sd">${sig.d}</div>
+    </div>`;
+  }).join('');
 
   // Log
   const logLines = [
@@ -2823,7 +2299,6 @@ async function runAnalysis() {
       <span class="log-msg ${l.cls||''}">${l.m}</span>
     </div>`).join('');
 
-  switchTab('overview');
   document.getElementById('results').style.display = 'block';
   document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

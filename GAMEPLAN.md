@@ -1,26 +1,34 @@
 # AI Detector — Build Gameplan
 
-**Goal:** Evolve from a heuristic-only browser tool into a production-quality
-Python detector backed by real language model signals, exposed via a FastAPI
-endpoint, with the JS site calling it as an optional backend.
+**Goal:** Evolve from a heuristic-only browser tool into a multi-model AI
+detector that blends stylometric analysis, neural classifiers, and real
+language model signals — all at zero cost to the developer and end user.
 
-**Why Python:** Real perplexity (GPT-2), RAIDAR rewrite-analysis (Claude API),
-and weight optimization via scikit-learn are not feasible in a browser.
-Heuristics alone plateau at ~87–90% accuracy on RAID; LM-based signals push
-past 95%.
+**Strategy:** Add neural detection in two tiers: (1) RoBERTa AI detector
+running client-side via Transformers.js/ONNX (no server needed), and
+(2) GPT-2 perplexity on a free HuggingFace Space (opt-in, server-side).
+Later phases add RAIDAR rewrite-analysis and weight optimization via a
+FastAPI backend.
+
+**Why this order:** The RoBERTa detector and GPT-2 perplexity are the two
+highest-ROI additions available at $0. They add real neural/LM signals that
+stylometric features physically cannot capture. RAIDAR requires an API key
+with per-call cost, so it comes after the free options are exhausted.
 
 ---
 
 ## Benchmark Targets
 
-| Phase | Recall | Precision | F1 |
-|---|---|---|---|
-| Current Python port | 87.6% | 92.7% | 0.843 |
-| After Phase 1 (signal parity) | ~85% | ~97% | ~0.905 |
-| After Phase 2 (RAIDAR) | ~95% | ~93% | ~0.94 |
-| After Phase 3 (weight optimization) | ~96% | ~94% | ~0.95 |
+| Phase | F1 | Notes |
+|---|---|---|
+| Phase 1 — Signal parity | 0.905 | ✅ Complete |
+| Phase 1b — Top-1 classifier | 0.916 | ✅ Complete (ML_WEIGHTS, 20-signal LR) |
+| Phase 2a — RoBERTa (client-side) | ~0.93 | Next: Transformers.js, $0 |
+| Phase 2b — GPT-2 perplexity (server) | ~0.94 | Next: HF Space, $0 |
+| Phase 3 — RAIDAR | ~0.95 | Claude API, ~$0.001/call |
+| Phase 4 — Weight optimization | ~0.95 | sklearn retrain on all signals |
 
-All targets measured on `liamdugan/raid` abstracts split, 500 samples.
+All targets measured on `liamdugan/raid` abstracts split, 500 samples, seed=42.
 
 ---
 
@@ -30,68 +38,229 @@ All targets measured on `liamdugan/raid` abstracts split, 500 samples.
 User pastes text
         │
         ▼
-┌──────────────────────────────────────────┐
-│           JS Frontend (GitHub Pages)     │
-│  • Local heuristics (instant, private)   │
-│  • "Enhance with API" toggle             │
-└──────────────┬───────────────────────────┘
-               │ POST /analyze
+┌──────────────────────────────────────────────────┐
+│       Tier 1 — Instant, private (client-side)    │
+│                                                  │
+│  L1: Stylometric classifier (17 signals, LR)     │
+│  L2: Forensic Unicode scan                       │
+│  L3: File metadata (DOCX/PDF)                    │
+│  L5: Authorial consistency                       │
+│  L6: RoBERTa AI detector (ONNX, Transformers.js) │ ← Phase 2a
+│                                                  │
+│  Verdict from ML_WEIGHTS (20-signal LR)          │
+│  + RoBERTa probability blended in                │
+└──────────────┬───────────────────────────────────┘
+               │ opt-in "Enhanced Analysis" toggle
                ▼
-┌──────────────────────────────────────────┐
-│         FastAPI Backend (Python)         │
-│                                          │
-│  Layer 1 — Heuristics (17 signals)       │
-│  Layer 2 — Forensic character scan       │
-│  Layer 3 — RAIDAR (Claude API rewrite)   │
-│  Layer 4 — Weight-optimized ensemble     │
-│  Layer 5 — Authorial consistency         │
-│                                          │
-│  Unified scoring → verdict               │
-│  Returns: score, verdict, per-signal     │
-└──────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│   Tier 2 — Enhanced, free (HuggingFace Space)    │
+│                                                  │
+│  L7: GPT-2 token perplexity (real, not proxy)    │ ← Phase 2b
+│  L7b: Fast-DetectGPT curvature (same GPT-2 pass) │
+│                                                  │
+│  ~2-5s latency, 30s cold start after idle        │
+│  Free forever (HF Spaces CPU tier)               │
+└──────────────┬───────────────────────────────────┘
+               │ future (requires API key)
+               ▼
+┌──────────────────────────────────────────────────┐
+│      Tier 3 — Premium (FastAPI backend)          │
+│                                                  │
+│  L8: RAIDAR rewrite analysis (Claude API)        │ ← Phase 3
+│  Weight-optimized ensemble over all layers       │ ← Phase 4
+│                                                  │
+│  Deployed on Render / HF Spaces                  │
+└──────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Phase 1 — Fix Broken Signals
-**Goal:** Fix the three signals identified as broken by RAID diagnostics before
-adding anything new. These are bugs, not missing features.
+## Phase 1 — Fix Broken Signals ✅ COMPLETE
+**Status:** Signal parity aligned. Top-1 classifier shipped (logistic regression
+over 17 signals → `classifierL1()` in `index.html`). Phase 3 ML_WEIGHTS model
+(20-signal LR, F1 0.916 on RAID) also shipped and drives the final combined score.
 
-**Files:** `raid_eval/detector.py`, `index.html`
-
-### Checklist
-
-- [ ] **Audit `rare_words`**
-  - JS TP avg = 24.6, Python TP avg = 51.4 — 26.8 point gap means one is inverted
-  - Compare JS `calcRareWords()` vs Python `calc_rare_words()` line by line
-  - The correct behavior: AI text scores HIGHER (more rare/formal words)
-  - Fix whichever implementation has the wrong polarity
-  - Re-run RAID eval to confirm gap closes
-
-- [ ] **Audit `sentence_opener_diversity`**
-  - JS TP avg = 8.0, Python TP avg = 37.3 — 29.3 point gap
-  - Compare JS `calcSentenceOpenerDiversity()` vs Python `calc_sentence_opener_diversity()`
-  - The correct behavior: AI scores HIGHER (repetitive openers like "The", "This", "In")
-  - Align formulas so both produce consistent values on same text
-
-- [ ] **Audit `clause_depth` in JS**
-  - JS FN avg = 74.7 vs JS TP avg = 41.7 — fires HARDER on missed AI than caught AI
-  - Signal is inverting recall: high clause depth is being scored as "more AI" but
-    the AI texts we miss (MPT/Llama-chat) use more complex clause structures
-  - Options: remove from JS, invert the scoring direction, or reduce its weight to ~0.01
-  - Re-run live_eval.py to confirm recall improvement
-
-- [ ] **Re-run RAID eval on both versions after fixes**
-  ```bash
-  cd raid_eval
-  python evaluate.py --n 500 --seed 42
-  python live_eval.py --n 500
-  ```
-  Target: Python F1 > 0.90, JS false-positive rate below 50%
+See `RESEARCH.md` for the 5-technique survey and implementation specs.
+See `eval/train_classifier.js` and `eval/model.json` for the training pipeline.
 
 ---
 
-## Phase 2 — RAIDAR (Rewrite-Based Detection)
+## Phase 2a — RoBERTa AI Detector (Client-Side, $0) ← NEXT
+**Goal:** Add a real neural classifier that runs in the browser via
+Transformers.js + ONNX. This catches token-level patterns that stylometric
+signals cannot detect.
+
+**Model:** `onnx-community/roberta-base-openai-detector-ONNX` (int8 quantized,
+~126 MB, downloaded once and cached by the browser).
+
+**Cost:** $0 — runs entirely client-side. No API key, no server, no rate limits.
+
+**File:** `index.html`
+
+### How It Works
+```
+User clicks "Analyze"
+    │
+    ├── L1-L5 run instantly (existing stylometric signals)
+    │
+    ├── RoBERTa loads (first time: ~5-10s download, then cached)
+    │   └── Transformers.js pipeline("text-classification", model)
+    │       └── Returns: { label: "LABEL_0/LABEL_1", score: 0.0-1.0 }
+    │           LABEL_0 = human, LABEL_1 = AI (GPT-2 trained)
+    │
+    └── Blend RoBERTa probability into the ML_WEIGHTS ensemble
+```
+
+### Checklist
+
+- [ ] **Add Transformers.js to index.html**
+  - Load from CDN: `https://cdn.jsdelivr.net/npm/@huggingface/transformers`
+  - Initialize pipeline lazily (only on first analysis, not on page load)
+  - Show loading indicator: "Loading neural model (one-time ~126 MB download)..."
+
+- [ ] **Run RoBERTa inference**
+  ```javascript
+  import { pipeline } from '@huggingface/transformers';
+  const detector = await pipeline('text-classification',
+    'onnx-community/roberta-base-openai-detector-ONNX',
+    { dtype: 'q8' }  // int8 quantized
+  );
+  const result = await detector(text);
+  // result: [{ label: 'LABEL_1', score: 0.92 }]
+  const robertaScore = result[0].label === 'LABEL_1'
+    ? result[0].score * 100
+    : (1 - result[0].score) * 100;
+  ```
+
+- [ ] **Add as Layer 6 in the UI**
+  - New panel: "Neural Analysis (RoBERTa)"
+  - Show confidence: "92% probability of AI generation"
+  - Toggle: "Enable neural detection (requires ~126 MB download)"
+  - Graceful degradation: if user declines download, L1-L5 still work
+
+- [ ] **Blend into ensemble**
+  - Add `robertaScore` to the ML_WEIGHTS feature vector
+  - Retrain logistic regression with RoBERTa as signal #21
+  - Or: simple weighted blend `combinedScore * 0.6 + robertaScore * 0.4`
+
+- [ ] **Evaluate improvement**
+  - Score RAID test set with and without RoBERTa
+  - Measure F1 lift, especially on GPT-family generators
+  - Document: RoBERTa was trained on GPT-2 — expect lower lift on Claude/Llama
+
+- [ ] **Performance budget**
+  - First load: ~5-10s (126 MB download, WASM compilation)
+  - Subsequent loads: ~1-2s (model cached, WASM cached)
+  - Inference: ~500ms-2s per text (CPU, depends on length)
+  - Target: total analysis under 3s after first load
+
+### Caveat
+RoBERTa-base-openai-detector was fine-tuned on GPT-2 output (2019). It
+generalizes somewhat to GPT-3.5/4 but less reliably to Claude, Llama, and
+Mistral. Still, it provides a fundamentally different signal class (token
+distributions vs. surface statistics) that complements the existing ensemble.
+
+---
+
+## Phase 2b — GPT-2 Perplexity Backend (HuggingFace Space, $0)
+**Goal:** Deploy GPT-2 (124M) on a free HuggingFace Space to compute real
+token-level perplexity. This revives the "dead" perplexity signal (currently
+weight=0.00 because it's a proxy, not real perplexity).
+
+**Cost:** $0 forever. HF Spaces free CPU tier: 2 vCPUs, 16 GB RAM. Sleeps
+after 48h idle, wakes on request (~30s cold start).
+
+**New files:** `hf-space/app.py`, `hf-space/requirements.txt`
+
+### How It Works
+```
+User enables "Enhanced Analysis" toggle
+    │
+    ▼
+POST https://your-space.hf.space/api/perplexity
+  body: { "text": "..." }
+    │
+    ▼
+GPT-2 forward pass on HF Space (CPU, ~2-5s)
+    │
+    ├── Token-level log-probabilities
+    ├── Perplexity = exp(mean negative log-prob)
+    ├── Burstiness = std of per-token surprisal
+    └── (Optional) Fast-DetectGPT curvature score
+    │
+    ▼
+Returns: { perplexity, burstiness, curvature }
+    │
+    ▼
+JS frontend blends into verdict (L7 signal)
+```
+
+### Checklist
+
+- [ ] **Build Gradio app (`hf-space/app.py`)**
+  ```python
+  import gradio as gr
+  import torch
+  from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
+  model = GPT2LMHeadModel.from_pretrained("gpt2")
+  tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+  def compute_perplexity(text: str):
+      tokens = tokenizer(text, return_tensors="pt", truncation=True, max_length=1024)
+      with torch.no_grad():
+          outputs = model(**tokens, labels=tokens["input_ids"])
+      perplexity = torch.exp(outputs.loss).item()
+      # Per-token surprisal for burstiness
+      logits = outputs.logits[:, :-1, :]
+      targets = tokens["input_ids"][:, 1:]
+      log_probs = -torch.nn.functional.cross_entropy(
+          logits.reshape(-1, logits.size(-1)), targets.reshape(-1), reduction='none'
+      )
+      burstiness = log_probs.std().item()
+      return {"perplexity": round(perplexity, 2), "burstiness": round(burstiness, 4)}
+
+  demo = gr.Interface(fn=compute_perplexity, inputs="text", outputs="json")
+  demo.launch()
+  ```
+
+- [ ] **Deploy to HuggingFace Spaces**
+  - Create Space: `huggingface.co/new-space` → Gradio, CPU, free
+  - Push `app.py` + `requirements.txt` (torch, transformers, gradio)
+  - Test the `/api/predict` endpoint
+
+- [ ] **Add opt-in toggle in index.html**
+  ```html
+  <label class="api-toggle">
+    <input type="checkbox" id="useEnhanced">
+    Enhanced analysis (sends text to HuggingFace — more accurate, ~5s)
+  </label>
+  ```
+
+- [ ] **Wire into scoring**
+  - Call HF Space API from `runAnalysis()` when toggle is checked
+  - Map perplexity to 0-100 score (low perplexity → high AI probability)
+  - Add as L7 signal in the ensemble
+  - Graceful fallback: if Space is sleeping/unreachable, skip and show
+    "Enhanced analysis unavailable" notice
+
+- [ ] **Implement Fast-DetectGPT curvature** (bonus, same GPT-2 pass)
+  - Conditional probability curvature from the RESEARCH.md Top-2 spec
+  - Adds a second signal from the same forward pass — free marginal cost
+
+- [ ] **Evaluate improvement**
+  - Score RAID test set with perplexity signal active vs. baseline
+  - Target: F1 improvement on texts where stylometric signals are weak
+    (paraphrased, short, or style-mimicked text)
+
+### Privacy notice
+When Enhanced Analysis is enabled, the user's text is sent to a HuggingFace
+Space (your own, not a third party). The toggle must be off by default with
+a clear label. No text is stored server-side.
+
+---
+
+## Phase 3 — RAIDAR (Rewrite-Based Detection)
 **Goal:** Use the Claude API to rewrite the input text and measure how much it
 changed. AI text gets barely rewritten (already fluent); human text gets
 substantially rewritten.
@@ -175,7 +344,7 @@ Score: 100 − (edit_distance × 200)  → higher = more AI
 
 ---
 
-## Phase 3 — Weight Optimization
+## Phase 4 — Weight Optimization
 **Goal:** Use scikit-learn to find optimal signal weights from RAID labeled data
 instead of hand-tuning.
 
@@ -209,7 +378,7 @@ instead of hand-tuning.
 
 ---
 
-## Phase 4 — FastAPI Backend
+## Phase 5 — FastAPI Backend
 **Goal:** Expose the Python detector as a REST API so the JS frontend can
 call it.
 
@@ -292,7 +461,7 @@ call it.
 
 ---
 
-## Phase 5 — Deploy Backend
+## Phase 6 — Deploy Backend
 **Goal:** Get the API running at a public URL so the JS frontend can call it.
 
 ### Options (pick one)
@@ -331,7 +500,7 @@ call it.
 
 ---
 
-## Phase 6 — Update JS Frontend
+## Phase 7 — Update JS Frontend
 **Goal:** Add an "Enhance with API" toggle to the live site that calls the
 Python backend when enabled.
 
@@ -375,7 +544,7 @@ Python backend when enabled.
 
 ---
 
-## Phase 7 — Documentation & Portfolio
+## Phase 8 — Documentation & Portfolio
 **Goal:** Make this project presentable for co-op applications.
 
 ### Checklist
@@ -411,32 +580,38 @@ Python backend when enabled.
 ```
 Ai-Layered-Detection-Tool/
 │
-├── index.html                  ← JS frontend (live site)
+├── index.html                  ← JS frontend (Tiers 1+2 toggle)
 ├── GAMEPLAN.md                 ← this file
+├── RESEARCH.md                 ← 5-technique survey + specs
 ├── README.md                   ← updated with benchmarks
 ├── CLAUDE.md                   ← codebase context
 │
-├── detector_v2/                ← Python detector (production)
-│   ├── __init__.py
-│   ├── detector.py             ← main scorer (all signals)
-│   ├── heuristics.py           ← ported + fixed JS signals
-│   ├── raidar.py               ← Claude rewrite signal (Phase 2)
-│   ├── forensic.py             ← character-level forensics
-│   ├── authorial.py            ← Layer 5 micro-habits
-│   └── optimize_weights.py     ← sklearn weight tuning (Phase 3)
+├── eval/                       ← training pipeline (Node.js)
+│   ├── extract_features.js     ← feature extraction via index.html fns
+│   ├── train_classifier.js     ← pure-Node LR trainer
+│   ├── model.json              ← exported Top-1 classifier weights
+│   ├── features.csv            ← 500-row feature matrix
+│   ├── fetch_dataset.js        ← HF REST dataset fetcher
+│   └── *.csv                   ← multi-dataset CSVs
+│
+├── hf-space/                   ← GPT-2 perplexity backend (Phase 2b)
+│   ├── app.py                  ← Gradio app for HuggingFace Spaces
+│   └── requirements.txt        ← torch, transformers, gradio
+│
+├── detector_v2/                ← Python detector (Phase 3+)
+│   ├── raidar.py               ← Claude rewrite signal
+│   ├── heuristics.py           ← ported JS signals
+│   └── optimize_weights.py     ← sklearn weight tuning (Phase 4)
 │
 ├── api/                        ← FastAPI backend (Phase 5)
 │   ├── main.py
-│   ├── models.py
 │   ├── requirements.txt
 │   └── Dockerfile
 │
 └── raid_eval/                  ← benchmarking tools (existing)
-    ├── detector.py             ← original Python port
+    ├── detector.py             ← reference Python implementation
     ├── evaluate.py             ← RAID benchmark runner
-    ├── diagnose.py             ← signal diagnostics
-    ├── live_eval.py            ← JS vs RAID
-    ├── compare_versions.py     ← JS vs Python comparison
+    ├── node_runner.js          ← Node.js scorer (evals index.html)
     └── requirements.txt
 ```
 
@@ -444,34 +619,37 @@ Ai-Layered-Detection-Tool/
 
 ## Quick-Start Checklist (Do These First)
 
-Phase 1 (signal parity) is complete. Next step: Phase 2 (RAIDAR).
+Phase 1 complete (signal parity + Top-1 classifier + ML_WEIGHTS).
+Next step: Phase 2a (RoBERTa in-browser) and Phase 2b (GPT-2 HF Space).
 
 ```bash
-# Verify Phase 1 results
-cd raid_eval
-python evaluate.py --n 500 --seed 42
+# Phase 2a — RoBERTa (client-side, just edit index.html)
+# No install needed — Transformers.js loads from CDN
 
-# Install dependencies for Phase 2
-pip install anthropic python-levenshtein
+# Phase 2b — GPT-2 perplexity (HuggingFace Space)
+cd hf-space
+pip install torch transformers gradio
+python app.py  # local test, then push to HF Spaces
 ```
 
 ---
 
 ## Effort Estimates
 
-| Phase | Estimated Time | Complexity |
-|---|---|---|
-| 1 — Signal parity | 4–6 hours | Medium |
-| 2 — RAIDAR | 3–4 hours | Medium |
-| 3 — Weight optimization | 2–3 hours | Low |
-| 4 — FastAPI | 4–6 hours | Medium |
-| 5 — Deploy | 1–2 hours | Low |
-| 6 — JS frontend update | 3–4 hours | Medium |
-| 7 — Documentation | 2–3 hours | Low |
-| **Total** | **~20–28 hours** | |
+| Phase | Estimated Time | Complexity | Cost |
+|---|---|---|---|
+| 1 — Signal parity | ~~4–6 hours~~ | ~~Medium~~ | ✅ Done |
+| 2a — RoBERTa (client-side) | 4–6 hours | Medium | $0 |
+| 2b — GPT-2 perplexity (HF Space) | 3–4 hours | Medium | $0 |
+| 3 — RAIDAR | 3–4 hours | Medium | ~$0.001/call |
+| 4 — Weight optimization | 2–3 hours | Low | $0 |
+| 5 — FastAPI backend | 4–6 hours | Medium | $0 (free hosting) |
+| 6 — Deploy | 1–2 hours | Low | $0 |
+| 7 — JS frontend update | 3–4 hours | Medium | $0 |
+| 8 — Documentation | 2–3 hours | Low | $0 |
+| **Remaining** | **~23–32 hours** | | |
 
 ---
 
 *Last updated: 2026-06-13*
 *Benchmarks measured on liamdugan/raid, abstracts split, 500 samples, seed=42*
-*Note: Phase 2 (GPT-2 perplexity) removed 2026-06-13 due to client-side performance concerns. RAIDAR moved to Phase 2.*
