@@ -1,20 +1,19 @@
 /**
- * Feature extractor for the Top-1 stylometric classifier.
+ * Iteration 1 experiment: 17 base stylometric features + 4 readability candidates.
  *
- * Loads the REAL detection logic from index.html (same approach as
- * raid_eval/node_runner.js) and emits the 17-signal Layer-1 feature vector for
- * every labeled row in eval/real_dataset.csv. Because the features come from
- * index.html's own functions, the vectors used for TRAINING are byte-identical
- * to the ones the browser will compute at INFERENCE — no port drift.
+ * Base features come from eval'ing index.html's <script> block with DOM stubs —
+ * copied verbatim from eval/extract_features.js so the 17 base columns stay
+ * byte-identical. The 4 candidates (fleschKincaid, gunningFog,
+ * functionWordRatio, commaRate) are computed in plain JS from the raw text.
  *
- * Output: eval/features.csv  (17 signal columns + is_ai_generated)
- * Usage:  node eval/extract_features.js
+ * Output: eval/experiments/features_ext.csv
+ * Usage:  node eval/experiments/extract_ext.js
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// ─── Minimal DOM / browser stubs (copied from node_runner.js) ────────────────
+// ─── Minimal DOM / browser stubs (copied from extract_features.js) ───────────
 const _el = () => ({
   addEventListener: () => {}, removeEventListener: () => {},
   classList: { add: () => {}, remove: () => {}, toggle: () => {}, contains: () => false },
@@ -32,19 +31,20 @@ global.TextEncoder = global.TextEncoder || require('util').TextEncoder;
 global.TextDecoder = global.TextDecoder || require('util').TextDecoder;
 
 // ─── Load & eval index.html's script block ───────────────────────────────────
-const htmlPath = path.join(__dirname, '..', 'index.html');
+const htmlPath = path.join(__dirname, '..', '..', 'index.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 if (!scriptMatch) { process.stderr.write('ERROR: no <script> block in index.html\n'); process.exit(1); }
 try { eval(scriptMatch[1]); }
 catch (e) { process.stderr.write(`Eval warning (non-fatal): ${e.message}\n`); }
 
-// ─── Feature names — order MUST match node_runner.js scores[0..16] ───────────
+// ─── Feature names — order MUST match extract_features.js ────────────────────
 const FEATURE_NAMES = [
   'perplexity', 'burstiness', 'lexical', 'aiPhrases', 'hedging', 'passive',
   'transitions', 'clauseDepth', 'punctuation', 'paraUniformity', 'rareWords',
   'formality', 'ngramRep', 'openerDiv', 'punctFinger', 'vocabCluster', 'densityMelody',
 ];
+const EXT_NAMES = ['fleschKincaid', 'gunningFog', 'functionWordRatio', 'commaRate'];
 
 function featureVector(text) {
   return [
@@ -68,29 +68,49 @@ function featureVector(text) {
   ];
 }
 
-// L2/L5 are NOT model features — they're emitted only so the trainer can
-// reconstruct the true product verdict (L1*0.75 + L2*0.15 + L5*0.10) both ways.
-function auxScores(text) {
-  return [runForensicAnalysis(text).score, runAuthoralConsistency(text).score];
+// ─── 4 readability candidates (plain JS, raw text) ───────────────────────────
+const STOPWORDS = new Set([
+  'the','a','an','and','or','but','if','of','to','in','on','at','by','for','with',
+  'about','as','into','through','after','is','are','was','were','be','been','being',
+  'have','has','had','do','does','did','will','would','can','could','shall','should',
+  'may','might','must','that','which','who','whom','this','these','those','it','its',
+  'he','she','they','them','his','her','their','we','us','our','you','your','i','me',
+  'my','not','no','than','then','so','too','very',
+]);
+
+function estSyllables(word) {
+  const groups = word.toLowerCase().match(/[aeiouy]+/g);
+  return Math.max(1, groups ? groups.length : 0);
 }
 
-// ─── CSV parsing (handles quoted fields) ─────────────────────────────────────
-function parseCSVRow(line) {
-  const out = []; let cur = ''; let q = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
-    else if (ch === ',' && !q) { out.push(cur); cur = ''; }
-    else cur += ch;
+function extFeatures(text) {
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  const nWords = Math.max(1, words.length);
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const nSents = Math.max(1, sentences.length);
+
+  let sylTotal = 0, complexWords = 0;
+  for (const w of words) {
+    const s = estSyllables(w);
+    sylTotal += s;
+    if (s >= 3) complexWords++;
   }
-  out.push(cur);
-  return out;
+
+  const fleschKincaid = 206.835 - 1.015 * (nWords / nSents) - 84.6 * (sylTotal / nWords);
+  const gunningFog = 0.4 * ((nWords / nSents) + 100 * complexWords / nWords);
+
+  const tokens = words.map(w => w.toLowerCase().replace(/[^a-z']/g, '')).filter(t => t.length > 0);
+  const stopCount = tokens.reduce((s, t) => s + (STOPWORDS.has(t) ? 1 : 0), 0);
+  const functionWordRatio = tokens.length ? stopCount / tokens.length : 0;
+
+  const commas = (text.match(/,/g) || []).length;
+  const commaRate = 100 * commas / nWords;
+
+  return [fleschKincaid, gunningFog, functionWordRatio, commaRate];
 }
 
-// Full-file CSV parser — respects quoted fields that span multiple newlines
-// (RAID abstracts and HC3 answers contain embedded \n). Returns an array of
-// records, each a string[] of fields. Naive split('\n') would fragment a
-// single multiline record into several bogus rows.
+// ─── CSV parsing (copied from extract_features.js) ───────────────────────────
+// Full-file CSV parser — respects quoted fields that span multiple newlines.
 function parseCSV(text) {
   const records = [];
   let field = '', record = [], q = false;
@@ -114,25 +134,20 @@ function parseCSV(text) {
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
-// Input/output configurable via CLI: node extract_features.js [input.csv] [output.csv]
-const inFile = process.argv[2] || 'combined_dataset.csv';
-const outFile = process.argv[3] || 'combined_features.csv';
-
-const csvPath = path.join(__dirname, inFile);
+const csvPath = path.join(__dirname, '..', 'combined_dataset.csv');
 const raw = fs.readFileSync(csvPath, 'utf8').replace(/^﻿/, '');
 const records = parseCSV(raw);
 const headers = records[0];
 const textIdx = headers.indexOf('text_content');
 const labelIdx = headers.indexOf('is_ai_generated');
-const sourceIdx = headers.indexOf('source'); // -1 if absent (legacy real_dataset.csv)
-if (textIdx === -1 || labelIdx === -1) {
-  process.stderr.write(`ERROR: expected text_content,is_ai_generated columns; got ${headers}\n`);
+const sourceIdx = headers.indexOf('source');
+if (textIdx === -1 || labelIdx === -1 || sourceIdx === -1) {
+  process.stderr.write(`ERROR: expected text_content,is_ai_generated,source columns; got ${headers}\n`);
   process.exit(1);
 }
 
 const MIN_WORDS = 20; // mirror scoreText's insufficient-text guard
-const outHeader = [...FEATURE_NAMES, 'is_ai_generated', 'l2_score', 'l5_score'];
-if (sourceIdx !== -1) outHeader.push('source');
+const outHeader = [...FEATURE_NAMES, ...EXT_NAMES, 'is_ai_generated', 'source'];
 const outRows = [outHeader.join(',')];
 let kept = 0, skipped = 0;
 
@@ -144,9 +159,9 @@ for (let i = 1; i < records.length; i++) {
   try {
     const fv = featureVector(text);
     if (fv.some(v => typeof v !== 'number' || Number.isNaN(v))) { skipped++; continue; }
-    const [l2, l5] = auxScores(text);
-    const row = [...fv.map(v => v.toFixed(4)), label, l2.toFixed(4), l5.toFixed(4)];
-    if (sourceIdx !== -1) row.push(cols[sourceIdx] || '');
+    const ext = extFeatures(text);
+    if (ext.some(v => typeof v !== 'number' || Number.isNaN(v))) { skipped++; continue; }
+    const row = [...fv.map(v => v.toFixed(4)), ...ext.map(v => v.toFixed(4)), label, cols[sourceIdx] || ''];
     outRows.push(row.join(','));
     kept++;
   } catch (e) {
@@ -156,6 +171,6 @@ for (let i = 1; i < records.length; i++) {
   if (i % 50 === 0) process.stdout.write(`  ${i}/${records.length - 1}\r`);
 }
 
-const outPath = path.join(__dirname, outFile);
+const outPath = path.join(__dirname, 'features_ext.csv');
 fs.writeFileSync(outPath, outRows.join('\n'), 'utf8');
 console.log(`\nWrote ${kept} feature rows (skipped ${skipped}) to ${outPath}`);
