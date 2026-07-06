@@ -221,25 +221,27 @@
     text-align: center;
   }
 
-  .score-ring {
-    width: 90px;
-    height: 90px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Syne', sans-serif;
-    font-size: 26px;
-    font-weight: 800;
-    border: 3px solid;
-    flex-direction: column;
-  }
+  .gauge { display: block; }
+  #gaugeNeedle { transition: transform 0.6s cubic-bezier(0.34, 1.2, 0.64, 1); }
 
-  .score-ring .ring-label { font-size: 8px; font-family: 'Space Mono', monospace; letter-spacing: 0.1em; margin-top: 2px; }
+  /* Ranked signal-contribution bars */
+  .contrib-section { margin-bottom: 32px; }
+  .contrib-row { display: flex; align-items: center; gap: 10px; font-size: 12px; margin-bottom: 9px; }
+  .contrib-name { width: 150px; flex-shrink: 0; text-align: right; color: #c8c8da; }
+  .contrib-track { flex: 1; background: var(--card); border-radius: 4px; height: 18px; overflow: hidden; }
+  .contrib-fill { height: 100%; border-radius: 4px; }
+  .contrib-val { width: 64px; flex-shrink: 0; font-weight: 700; font-family: 'Space Mono', monospace; }
+  .contrib-legend { display: flex; gap: 18px; margin-top: 14px; font-size: 11px; color: var(--muted); }
+  .contrib-legend span { display: flex; align-items: center; gap: 6px; }
+  .contrib-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 
-  .score-ring.ai { border-color: var(--accent2); color: var(--accent2); }
-  .score-ring.human { border-color: var(--accent); color: var(--accent); }
-  .score-ring.mixed { border-color: var(--warn); color: var(--warn); }
+  /* Sentence heatmap */
+  .heatmap-body { line-height: 2.1; font-size: 15px; }
+  .hm-sent { padding: 1px 2px; border-radius: 2px; cursor: help; }
+  .hm-note { font-size: 11px; color: var(--muted); margin-bottom: 14px; letter-spacing: 0.04em; }
+  .hm-legend { display: flex; align-items: center; gap: 8px; margin: 18px 0 6px; font-size: 11px; color: var(--muted); }
+  .hm-scale { flex: 1; max-width: 240px; height: 10px; border-radius: 5px;
+    background: linear-gradient(90deg, #00ff9d 0%, #ffaa00 50%, #ff3c6e 100%); }
 
   /* Metric grid */
   .metrics-grid {
@@ -741,10 +743,18 @@
         <p id="verdictSub"></p>
       </div>
       <div class="score-ring-wrap">
-        <div class="score-ring" id="scoreRing">
-          <span id="scoreNum"></span>
-          <span class="ring-label">AI SCORE</span>
-        </div>
+        <svg class="gauge" id="gauge" viewBox="0 0 200 126" width="150" role="img" aria-label="AI score gauge from human to AI">
+          <path d="M20 100 A80 80 0 0 1 75.3 23.9" fill="none" stroke="#00ff9d" stroke-width="13" stroke-linecap="round"/>
+          <path d="M75.3 23.9 A80 80 0 0 1 124.7 23.9" fill="none" stroke="#ffaa00" stroke-width="13" stroke-linecap="round"/>
+          <path d="M124.7 23.9 A80 80 0 0 1 180 100" fill="none" stroke="#ff3c6e" stroke-width="13" stroke-linecap="round"/>
+          <line id="gaugeNeedle" x1="100" y1="100" x2="100" y2="34" stroke="#fff" stroke-width="3" stroke-linecap="round" transform="rotate(0 100 100)"/>
+          <circle cx="100" cy="100" r="5" fill="#fff"/>
+          <text id="scoreNum" x="100" y="88" text-anchor="middle" fill="#fff" font-size="30" font-weight="800" font-family="'Syne',sans-serif">–</text>
+          <text x="100" y="101" text-anchor="middle" fill="#6a6a82" font-size="8" letter-spacing="2" font-family="'Space Mono',monospace">AI SCORE</text>
+          <text x="20" y="120" text-anchor="middle" fill="#00ff9d" font-size="8" font-family="'Space Mono',monospace">HUMAN</text>
+          <text x="100" y="17" text-anchor="middle" fill="#ffaa00" font-size="8" font-family="'Space Mono',monospace">MIXED</text>
+          <text x="180" y="120" text-anchor="middle" fill="#ff3c6e" font-size="8" font-family="'Space Mono',monospace">AI</text>
+        </svg>
       </div>
     </div>
 
@@ -753,11 +763,20 @@
       <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
       <button class="tab-btn" data-tab="linguistic" onclick="switchTab('linguistic')">Signals</button>
       <button class="tab-btn" data-tab="forensic" onclick="switchTab('forensic')">Forensic</button>
+      <button class="tab-btn" data-tab="heatmap" onclick="switchTab('heatmap')">Heatmap</button>
     </div>
 
     <!-- Overview: score panels + signals + authorial consistency -->
     <div class="tab-pane active" id="tab-overview">
       <div class="dual-scores" id="dualScores"></div>
+      <div class="contrib-section">
+        <div class="section-title">What drove the verdict</div>
+        <div id="contribBars"></div>
+        <div class="contrib-legend">
+          <span><i style="background:var(--accent2)"></i>pushes toward AI</span>
+          <span><i style="background:var(--accent)"></i>pushes toward human</span>
+        </div>
+      </div>
       <div class="signals-section">
         <div class="section-title">Detected Signals</div>
         <div class="signals-list" id="signalsList"></div>
@@ -774,6 +793,19 @@
     <div class="tab-pane" id="tab-forensic">
       <div class="forensic-banner" id="forensicBanner"></div>
       <div id="metaPanel"></div>
+    </div>
+
+    <!-- Heatmap: per-sentence AI-likelihood, scored by a local window -->
+    <div class="tab-pane" id="tab-heatmap">
+      <div class="section-title">Sentence Heatmap</div>
+      <div class="hm-note" id="heatmapNote"></div>
+      <div class="heatmap-body" id="heatmapBody"></div>
+      <div class="hm-legend">
+        <span>Human</span>
+        <span class="hm-scale"></span>
+        <span>AI</span>
+        <span style="margin-left:8px">· hover a sentence for its score</span>
+      </div>
     </div>
 
     <!-- Hidden: kept for JS compatibility, not shown to users -->
@@ -1453,6 +1485,85 @@ function classifierL1(features) {
     z += CLASSIFIER_MODEL.weights[i] * ((features[i] - CLASSIFIER_MODEL.mean[i]) / CLASSIFIER_MODEL.std[i]);
   }
   return (1 / (1 + Math.exp(-z))) * 100;
+}
+
+// Human-readable names for the 17 Layer-1 signals, in classifier feature order.
+const SIGNAL_NAMES = ['Perplexity', 'Burstiness', 'Lexical diversity', 'AI-phrase density',
+  'Hedging', 'Passive voice', 'Transition uniformity', 'Clause depth', 'Punctuation variance',
+  'Paragraph uniformity', 'Rare-word profile', 'Register stability', 'N-gram repetition',
+  'Opener diversity', 'Punctuation fingerprint', 'Vocab clustering', 'Density melody'];
+
+// Decompose a classifierL1 prediction into each signal's signed contribution to
+// the logit: weight * standardized-feature. Positive pushes toward AI, negative
+// toward human. Returns only nonzero-weight signals, sorted by |contribution|.
+function signalContributions(features) {
+  const out = [];
+  for (let i = 0; i < features.length; i++) {
+    const w = CLASSIFIER_MODEL.weights[i];
+    if (w === 0) continue;
+    const contribution = w * ((features[i] - CLASSIFIER_MODEL.mean[i]) / CLASSIFIER_MODEL.std[i]);
+    out.push({ name: SIGNAL_NAMES[i], contribution, dir: contribution >= 0 ? 'ai' : 'human' });
+  }
+  return out.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+}
+
+// The 17-signal feature vector for an arbitrary span of text — same functions
+// and order as runAnalysis. Used by the sentence heatmap so each sentence is
+// scored by the SAME classifier that produces the headline score (no drift).
+function featureVector17(text) {
+  return [
+    calcPerplexity(text).score, calcBurstiness(text), calcLexicalDiversity(text),
+    calcAIPhrases(text).score, calcHedging(text), calcPassiveVoice(text),
+    calcTransitions(text), calcClauseDepth(text), calcPunctuationVariance(text),
+    calcParagraphUniformity(text), calcRareWords(text), calcFormalityShift(text),
+    calcNgramRepetition(text), calcSentenceOpenerDiversity(text),
+    calcPunctuationFingerprint(text), calcVocabClustering(text),
+    calcDensityMelodyEnsemble(text).score,
+  ];
+}
+
+// Score each sentence by the AI-probability of its surrounding WINDOW_WORDS-word
+// neighborhood. A single sentence is too short for ~half the signals (burstiness,
+// paragraph/opener uniformity, n-gram repetition need multiple sentences), so we
+// score a local window centred on each sentence — honest about what is actually
+// measurable at this granularity. Below WINDOW_WORDS total, every sentence shares
+// the whole-document window (flat heatmap = "not enough text to localize").
+function computeSentenceHeatmap(text) {
+  const WINDOW_WORDS = 50;
+  const sentences = getSentences(text);
+  const words = text.split(/\s+/).filter(Boolean);
+  const wc = words.length;
+  const localized = wc >= WINDOW_WORDS;
+  let cursor = 0;
+  const out = [];
+  for (const s of sentences) {
+    const n = Math.max(1, s.split(/\s+/).filter(Boolean).length);
+    const mid = cursor + n / 2;
+    cursor += n;
+    let b = Math.min(wc, Math.round(mid + WINDOW_WORDS / 2));
+    let a = Math.max(0, b - WINDOW_WORDS);
+    b = Math.min(wc, a + WINDOW_WORDS);
+    const windowText = words.slice(a, b).join(' ') || s;
+    out.push({ text: s, score: Math.round(classifierL1(featureVector17(windowText))), localized });
+  }
+  return out;
+}
+
+// Map a 0–100 AI score to a colour on the green→amber→red verdict ramp. Returns
+// an {r,g,b} the heatmap composes into a translucent fill + a solid underline,
+// so meaning is never carried by colour alone.
+function heatColor(score) {
+  const s = Math.max(0, Math.min(100, score));
+  let r, g, b;
+  if (s <= 50) { const t = s / 50; r = Math.round(255 * t); g = Math.round(255 + (170 - 255) * t); b = Math.round(157 + (0 - 157) * t); }
+  else { const t = (s - 50) / 50; r = 255; g = Math.round(170 + (60 - 170) * t); b = Math.round(0 + 110 * t); }
+  return { r, g, b };
+}
+
+// Escape user text before injecting into innerHTML (heatmap renders raw sentences).
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Runs sampleCount independent random-window analyses on the document.
@@ -2650,7 +2761,7 @@ async function runAnalysis() {
   const icon = document.getElementById('verdictIcon');
   const title = document.getElementById('verdictTitle');
   const sub = document.getElementById('verdictSub');
-  const ring = document.getElementById('scoreRing');
+  const needle = document.getElementById('gaugeNeedle');
   const num = document.getElementById('scoreNum');
 
   let cls, iconStr, titleStr, subStr;
@@ -2673,11 +2784,14 @@ async function runAnalysis() {
   }
 
   banner.className = `verdict-banner ${cls}`;
-  ring.className = `score-ring ${cls}`;
+  // Rotate the gauge needle: score 0 → -90° (left/human), 50 → 0° (up), 100 → +90° (right/AI).
+  needle.setAttribute('transform', `rotate(${(trueCombined - 50) * 1.8} 100 100)`);
+  const cssVar = cls === 'ai' ? '--accent2' : cls === 'human' ? '--accent' : '--warn';
+  num.setAttribute('fill', getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || '#fff');
   icon.textContent = iconStr;
   title.textContent = titleStr;
   sub.textContent = subStr;
-  num.textContent = trueCombined + '%';
+  num.textContent = trueCombined;
 
   // Score panels — 3-column grid (L1, L2, L5), L3 spans full when file loaded
   const dualEl = document.getElementById('dualScores');
@@ -2778,6 +2892,32 @@ async function runAnalysis() {
         <span>${s.detail}</span>
       </div>
     </div>`).join('');
+
+  // Ranked signal contributions — decomposition of the Layer-1 classifier
+  // (weight × standardized feature). Shows which signals actually drove the score.
+  const contribs = signalContributions(scores.slice(0, 17));
+  const maxAbs = Math.max(...contribs.map(c => Math.abs(c.contribution)), 1e-6);
+  document.getElementById('contribBars').innerHTML = contribs.map(c => {
+    const col = c.dir === 'ai' ? 'var(--accent2)' : 'var(--accent)';
+    const pct = Math.round(Math.abs(c.contribution) / maxAbs * 100);
+    const tag = c.dir === 'ai' ? 'AI' : 'human';
+    const sign = c.contribution >= 0 ? '+' : '−';
+    return `<div class="contrib-row">
+      <div class="contrib-name">${c.name}</div>
+      <div class="contrib-track"><div class="contrib-fill" style="width:${pct}%;background:${col}"></div></div>
+      <div class="contrib-val" style="color:${col}">${sign}${Math.abs(c.contribution).toFixed(2)} ${tag}</div>
+    </div>`;
+  }).join('');
+
+  // Per-sentence heatmap — each sentence coloured by its local-window AI score.
+  const hm = computeSentenceHeatmap(text);
+  document.getElementById('heatmapNote').textContent = (hm.length && hm[0].localized)
+    ? 'Each sentence is scored by the AI-probability of its surrounding ~50-word window, using the same Layer-1 classifier as the headline score. Hover for the exact value.'
+    : 'Document is short — there is not enough text to localise the signal per sentence, so every sentence shares the whole-document score.';
+  document.getElementById('heatmapBody').innerHTML = hm.map(h => {
+    const c = heatColor(h.score);
+    return `<span class="hm-sent" title="AI score: ${h.score}%" style="background:rgba(${c.r},${c.g},${c.b},0.18);border-bottom:2px solid rgb(${c.r},${c.g},${c.b})">${escapeHtml(h.text)}</span> `;
+  }).join('');
 
   // Log
   const logLines = [
