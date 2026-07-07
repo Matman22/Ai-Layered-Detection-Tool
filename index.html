@@ -682,6 +682,21 @@
   }
   .no-file-placeholder .placeholder-icon { font-size: 32px; margin-bottom: 12px; }
   .no-file-placeholder strong { display: block; color: var(--text); font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+
+  /* Enhanced Analysis card (opt-in language-model signal) */
+  .enhanced-section { margin-top: 18px; }
+  .enhanced-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+  .enhanced-intro p { color: var(--muted); font-size: 12px; line-height: 1.65; margin-bottom: 14px; }
+  .enhanced-btn { background: var(--accent3); color: #fff; border: 1px solid var(--accent3); }
+  .enhanced-btn:hover { filter: brightness(1.15); }
+  .enhanced-btn:disabled { opacity: .6; cursor: wait; }
+  .enh-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .enh-num { font-family: 'Syne', sans-serif; font-size: 34px; font-weight: 800; line-height: 1; }
+  .enh-label { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
+  .enh-track { background: var(--surface); border-radius: 5px; height: 12px; overflow: hidden; margin-bottom: 10px; }
+  .enh-fill { height: 100%; transition: width .5s ease; }
+  .enh-meta { color: var(--muted); font-size: 11px; line-height: 1.55; }
+  .enh-err { color: var(--warn); font-size: 12px; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -782,6 +797,23 @@
         <div class="signals-list" id="signalsList"></div>
       </div>
       <div id="layer5Panel"></div>
+
+      <!-- Enhanced Analysis: opt-in language-model signal (Fast-DetectGPT backend).
+           Kept a separate, clearly-labeled card — it does NOT alter the local
+           verdict above. Lets the viewer compare the LM signal against stylometry. -->
+      <div class="enhanced-section">
+        <div class="section-title">Enhanced Analysis — Language-Model Signal</div>
+        <div class="enhanced-card">
+          <div class="enhanced-intro" id="enhancedIntro">
+            <p>Scores the text with a GPT-2 perplexity model (Fast-DetectGPT). Unlike the
+               stylometry layers above, this signal generalizes across writing domains —
+               validated mean AUROC 0.83 vs 0.52 for stylometry. Runs on a free server;
+               the first call may take ~30s to wake it.</p>
+            <button class="btn enhanced-btn" id="enhancedBtn" onclick="runEnhancedAnalysis()">Run Enhanced Analysis →</button>
+          </div>
+          <div class="enhanced-result" id="enhancedResult" style="display:none"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Signals: detailed per-signal metric cards -->
@@ -2615,6 +2647,55 @@ function switchTab(name) {
   document.getElementById(`tab-${name}`).classList.add('active');
 }
 
+// ============================================================
+// ENHANCED ANALYSIS — opt-in language-model signal
+// Calls the Fast-DetectGPT backend (free HF Space). Kept fully
+// separate from the local verdict: if the server is asleep or errors,
+// the rest of the tool is unaffected.
+// ============================================================
+const SPACE_URL = 'https://mlr4442-fast-detectgpt.hf.space';
+let lastAnalyzedText = '';
+
+async function runEnhancedAnalysis() {
+  const text = lastAnalyzedText;
+  if (!text) return;
+  const btn = document.getElementById('enhancedBtn');
+  const resultEl = document.getElementById('enhancedResult');
+  const introEl = document.getElementById('enhancedIntro');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing… (waking server, up to 30s)';
+  try {
+    const res = await fetch(SPACE_URL + '/score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.ok) throw new Error('text too short to score');
+    const pct = Math.round(data.probability * 100);
+    const color = pct >= 60 ? 'var(--accent2)' : pct >= 40 ? 'var(--warn)' : 'var(--accent)';
+    const label = pct >= 60 ? 'Likely AI' : pct >= 40 ? 'Ambiguous' : 'Likely Human';
+    introEl.style.display = 'none';
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `
+      <div class="enh-head">
+        <span class="enh-num" style="color:${color}">${pct}%</span>
+        <span class="enh-label" style="color:${color}">${label}</span>
+      </div>
+      <div class="enh-track"><div class="enh-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="enh-meta">GPT-2 curvature d=${data.discrepancy.toFixed(2)} · ${data.n_tokens} tokens scored · zero-shot language-model signal, validated mean AUROC 0.83 across 4 datasets (vs 0.52 for stylometry).</div>
+    `;
+  } catch (e) {
+    introEl.style.display = 'none';
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `<div class="enh-err">Enhanced analysis unavailable (${e.message}). The free server may be asleep — try again in a moment. The rest of the tool works normally.</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Enhanced Analysis →';
+  }
+}
+
 async function runAnalysis() {
   // Use textarea content first, fall back to extracted file text
   const textareaVal = document.getElementById('docInput').value.trim();
@@ -2964,6 +3045,11 @@ async function runAnalysis() {
     </div>`).join('');
 
   switchTab('overview');
+  // Reset the opt-in Enhanced Analysis card for this fresh run.
+  lastAnalyzedText = text;
+  document.getElementById('enhancedIntro').style.display = 'block';
+  document.getElementById('enhancedResult').style.display = 'none';
+
   document.getElementById('results').style.display = 'block';
   document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
