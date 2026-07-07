@@ -133,3 +133,27 @@ Sanity gates all reproduced exactly: C1 source6 = 0.5317 (iter-6 V2), C3 source6
 **Winner: C2 at 0.5334** — but it clears C1 by only +0.0017, and the ordering of LOSO means (C3 0.6513 > C2 0.6178 > C1 0.5921) is nearly the *reverse* of the external ordering (C2 > C1 > C3), confirming once more that in-loop LOSO gains were meta-overfitting: the config that looked best internally (M2) is the worst externally, below chance.
 
 **FINAL LOOP VERDICT (pre-registered branch fired: best source6 AUROC 0.5334 <= 0.55): NO stylometric config generalizes — stylometry ceiling confirmed on external data; LM backend (Fast-DetectGPT) is the path forward.** The 21-feature stylometric stack, under every selection scheme tried across 7 iterations, sits at or barely above chance (0.45-0.53 AUROC) on a genuinely unseen source. This matches the earlier LOSO-AUROC-0.52 stylometry-ceiling finding and closes the optimization loop: further rule-tuning on this feature set is not worth pursuing; effort should move to the perplexity-curvature LM backend (Fast-DetectGPT) planned for the FastAPI phase.
+
+## Fast-DetectGPT backend — live eval (2026-07-07)
+
+Deployed the zero-shot Fast-DetectGPT scorer (gpt2-124M, single-model curvature)
+to a free HF Space (mlr4442/fast-detectgpt, Docker/CPU basic). Scored the same
+combined_dataset.csv sources through the /score endpoint, balanced 40 human /
+40 AI per source (backend/eval_via_api_balanced.js — the naive head-N limit hits
+single-class NaN because the CSV is grouped by label).
+
+Per-source AUROC (zero-shot, no training, no learned boundary):
+
+  HC3                  0.9831   (stylometry LOSO: 0.26 INVERTED)
+  RAID                 0.9731   (stylometry LOSO: 0.70)
+  andythetechnerd03    0.8075   (stylometry LOSO: 0.69)
+  MAGE                 0.5681   (stylometry LOSO: 0.45)
+  ------------------------------------------------------------
+  MEAN per-source      0.8330   vs stylometry 0.524 (+0.309)
+  POOLED               0.8501
+
+VERDICT: gate passed decisively. The LM signal transfers where stylometry did
+not — most starkly HC3 (0.26 -> 0.98). MAGE is the weak source (many generators,
+gpt2 a poor proxy). Next: calibrate CENTER/SCALE in app.py to the operating
+threshold, then wire an opt-in "Enhanced Analysis" fetch into index.html.
+Caveat: n=40/class/source — effect is large and consistent but samples are small.
