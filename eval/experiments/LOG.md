@@ -1,0 +1,135 @@
+# Experiment Log
+
+## Iteration 1 — +4 readability features
+
+Candidates: fleschKincaid, gunningFog, functionWordRatio, commaRate (plain-JS, computed from raw text).
+Config: LOSO logistic regression, LR=0.1, EPOCHS=3000, LAMBDA=0.01, standardized features, rank-sum AUROC. n=1369 rows.
+
+| Held-out source    | (a) base 17 | (b) all 21 | (c) 4 candidates alone |
+|--------------------|------------:|-----------:|-----------------------:|
+| andythetechnerd03  | 0.6902 (n=500) | 0.6826 | 0.4039 |
+| RAID               | 0.6968 (n=300) | 0.8008 | 0.4926 |
+| MAGE               | 0.4507 (n=279) | 0.4625 | 0.3544 |
+| HC3                | 0.2593 (n=290) | 0.2793 | 0.2684 |
+| **MEAN**           | **0.5243**  | **0.5563** | **0.3798** |
+
+Verdict: **KEEP** (0.5563 > 0.545 threshold; base-17 sanity check reproduced 0.5243 ≈ 0.524 baseline).
+
+Interpretation: the readability features carry no transferable signal on their own (0.38 mean — anti-correlated on most sources), but interacting with the base 17 they lift RAID sharply (0.70→0.80) and nudge MAGE/HC3 up without hurting andythetechnerd03 much; note HC3 remains far below chance (0.28), so the inverted-polarity problem on that domain is untouched.
+
+## Iteration 2 — quadratic (extremeness) terms
+
+Hypothesis: feature direction is domain-specific but extremeness transfers; squared standardized terms (z², z fit on training sources only per fold, then re-standardized on train) let LR learn "extreme in either direction = AI". Script: loso_quad.js. Config otherwise identical (LR=0.1, EPOCHS=3000).
+
+| Held-out source    | (a) 21 linear λ=0.01 | (b) 42 quad λ=0.01 | (b2) 42 quad λ=0.05 | (c) 21 squared alone λ=0.01 |
+|--------------------|---------------------:|-------------------:|--------------------:|----------------------------:|
+| andythetechnerd03  | 0.6826 (n=500)       | 0.5024             | 0.5088              | 0.4898                       |
+| RAID               | 0.8008 (n=300)       | 0.8026             | 0.8142              | 0.6832                       |
+| MAGE               | 0.4625 (n=279)       | 0.3514             | 0.3381              | 0.2146                       |
+| HC3                | 0.2793 (n=290)       | 0.2634             | 0.2760              | 0.3136                       |
+| **MEAN**           | **0.5563**           | **0.4799**         | **0.4843**          | **0.4253**                   |
+
+Verdict: **REVERT** (best quad mean 0.4843 < 0.5563; sanity gate (a) reproduced 0.5563 exactly). Keep the 21-linear model from iteration 1.
+
+Interpretation: the extremeness hypothesis fails — squared terms alone are *worse* than chance on 3 of 4 sources (mean 0.43), meaning what counts as "extreme" is itself domain-specific (each source occupies a different region of feature space, so held-out z² magnitudes don't transfer). The HC3 inversion did not improve (0.2793 → 0.2634/0.2760, essentially flat-to-worse); quad terms also destroyed andythetechnerd03 (0.68→0.50) and MAGE (0.46→0.35), with RAID the lone mild beneficiary (+0.01).
+
+## Iteration 3 — direction-consistency feature selection
+
+Hypothesis: features whose label direction (sign of within-source single-feature AUROC − 0.5) is inconsistent across the 3 training sources are the ones that invert on unseen domains. Per fold: compute per-training-source single-feature AUROCs; (A) strict = keep only if all 3 directions agree with |AUROC−0.5| ≥ 0.03; (B) majority = keep if ≥2 of 3 agree with margin ≥ 0.03. Script: loso_dircons.js. LR config identical (LR=0.1, EPOCHS=3000, LAMBDA=0.01).
+
+| Held-out source    | (a) all-21 sanity | (A) strict | (B) majority |
+|--------------------|------------------:|-----------:|-------------:|
+| andythetechnerd03  | 0.6826 (n=500)    | 0.5000 (D=3) | 0.7143 (D=17) |
+| RAID               | 0.8008 (n=300)    | N/A (D=0)  | 0.8266 (D=12) |
+| MAGE               | 0.4625 (n=279)    | 0.3906 (D=3) | 0.5704 (D=13) |
+| HC3                | 0.2793 (n=290)    | 0.3090 (D=1) | 0.3825 (D=16) |
+| **MEAN**           | **0.5563**        | **N/A**    | **0.6235**   |
+
+Selected features per fold:
+- andythetechnerd03 held out — A: perplexity, burstiness, punctuation. B (17): perplexity, burstiness, lexical, aiPhrases, hedging, passive, transitions, punctuation, rareWords, ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody, fleschKincaid, gunningFog, commaRate
+- RAID held out — A: (none — no feature is direction-consistent across andythetechnerd03/MAGE/HC3). B (12): perplexity, burstiness, lexical, aiPhrases, passive, transitions, punctuation, ngramRep, densityMelody, fleschKincaid, gunningFog, functionWordRatio
+- MAGE held out — A: aiPhrases, ngramRep, densityMelody. B (13): perplexity, burstiness, lexical, aiPhrases, passive, transitions, punctuation, rareWords, ngramRep, densityMelody, fleschKincaid, gunningFog, commaRate
+- HC3 held out — A: passive. B (16): perplexity, burstiness, lexical, aiPhrases, hedging, passive, transitions, punctuation, ngramRep, openerDiv, punctFinger, vocabCluster, densityMelody, fleschKincaid, gunningFog, functionWordRatio
+
+Verdict: **KEEP** — majority rule mean 0.6235 > 0.5563 (sanity gate reproduced 0.5563 exactly). New best: 21-feature pool with per-fold majority-direction selection (margin 0.03). Strict rule is unusable: with only 3 training sources it collapses to 0–3 features per fold (0 on the RAID fold — nothing agrees across andythetechnerd03/MAGE/HC3).
+
+HC3 improved meaningfully (0.2793 → 0.3825, +0.10) though it remains inverted; every fold improved under majority (andy 0.68→0.71, RAID 0.80→0.83, MAGE 0.46→0.57 — now above chance). Eleven features survive majority selection in all 4 folds: perplexity, burstiness, lexical, aiPhrases, passive, transitions, punctuation, ngramRep, densityMelody, fleschKincaid, gunningFog; clauseDepth, formality, and paraUniformity are never selected. Anomaly worth noting: 9 features have single-feature AUROC of exactly 0.500 within andythetechnerd03 (perplexity, burstiness, punctuation, paraUniformity, formality, openerDiv, punctFinger, vocabCluster, commaRate) — verified: they are *constant* in that source (8 stuck at 50.0000, commaRate at 0.0000), i.e. the extractor never computed them for andythetechnerd03 rows. This silently disqualifies them from that source's "vote" and is a data-quality bug worth fixing upstream: perplexity and burstiness are top transferable features everywhere else.
+
+## Iteration 4 — data fix: andythetechnerd03 frozen features
+
+**Root cause (diagnosed, not a pipeline bug):** the upstream HF dataset `andythetechnerd03/AI-human-text` is itself pre-flattened — every row is lowercased with ALL punctuation and newlines stripped. Verified two ways:
+1. Live datasets-server API returns flattened text at every offset probed (0, 50k, 150k, 300k, 450k of 462,873 rows; 0/10 rows at each offset contain a newline, comma, period, or uppercase letter). Sample at offset 0 (matches our row 1 byte-for-byte): `"studies have been proven that people are starting to not drive cars as much americans are buying fewer cars and getting fewer licenses there..."`
+2. Our pipeline is faithful: `eval/real_dataset.csv` and `eval/combined_dataset.csv` contain the same flattened text (all 500 rows: 0 newlines, 0 commas, 0 periods, avg 2150 chars), while RAID/MAGE/HC3 rows in the same combined CSV retain normal punctuation. `fetch_dataset.js`/`fetch_datasets.js` never stripped anything.
+
+Consequently the 9 frozen features are *unmeasurable* on this source: the index.html signal functions return their neutral 50 (commaRate computes a true 0) when text has no sentence/paragraph/punctuation structure. No re-fetch can fix this — perplexity and burstiness will never vary on andythetechnerd03. Bonus finding: paraUniformity is ALSO constant within MAGE and HC3 (only RAID varies), which is why it is never selected in any fold.
+
+**Fix tested** (script: loso_dircons_v2.js; frozen (source,feature) pairs detected data-driven, not hardcoded): (C) explicitly exclude frozen pairs from that source's direction votes; (D) additionally treat frozen values as missing when that source is in TRAINING (impute mean of the other training sources → z≈0, rows stop distorting the weight). LR config unchanged (LR=0.1, EPOCHS=3000, LAMBDA=0.01).
+
+| Held-out source | (a) all-21 | (B) majority (iter 3) | (C) +vote-excl | (D) +train-impute |
+|---|---:|---:|---:|---:|
+| andythetechnerd03 | 0.6826 | 0.7143 | 0.7143 | 0.7143 |
+| RAID | 0.8008 | 0.8266 | 0.8266 | 0.8281 |
+| MAGE | 0.4625 | 0.5704 | 0.5704 | 0.5637 |
+| HC3 | 0.2793 | 0.3825 | 0.3825 | 0.3770 |
+| **MEAN** | **0.5563** | **0.6235** | **0.6235** | **0.6208** |
+
+Verdict: **NO CHANGE — keep iteration-3 config (0.6235)**. Sanity gates reproduced exactly (0.5563 / 0.6235). (C) is bit-identical to (B) in every fold and selects identical feature sets — a constant feature scores AUROC exactly 0.500, fails the 0.03 margin, and therefore already abstains from that source's vote; the majority rule was implicitly robust to the frozen features all along. (D) fails the gate (0.6208 < 0.6235): neutral-50 constants in training are apparently a *mildly useful* anchor rather than a distortion — imputing them away nudged RAID up (+0.0015) but cost MAGE (−0.0067) and HC3 (−0.0055).
+
+Do perplexity/burstiness now vary on andythetechnerd03? **No, and they cannot** — the source text genuinely contains no punctuation/newlines, so any fix must come from replacing the source (e.g. swap in a non-flattened essay corpus) rather than re-fetching or re-extracting. That is a candidate for a future iteration.
+
+## Iteration 5 — 5th training source (dmitva/human_ai_generated_text)
+
+Hypothesis: adding a clean (punctuation-intact) 5th AI/human source to the TRAINING POOLS ONLY makes direction votes more reliable. Held-out test sets unchanged (dmitva is never held out), so the gate stays comparable.
+
+**Source chosen:** `dmitva/human_ai_generated_text` (config `default`, split `train`, 1M rows) — first candidate probed, worked immediately. Each record has `human_text` + `ai_text` columns; exploded into two rows per record (HC3-style). Label mapping: `human_text` → 0, `ai_text` → 1. Evidence: sample text is punctuation/case/newline-intact; human samples contain organic typos ("desicions", "ncreased to lear", "Some Schools offter"), AI samples are polished template prose ("Ultimately, this decision will depend on the individual student..."). Fetched 250 human + 250 AI (offsets 0–300, min 20 words); `source5.csv`, features appended in `features_ext5.csv` (1369+500 rows). Scripts: fetch_source5.js, extract_ext5.js, loso_5src.js.
+
+Configs: (s21)/(sB) 3-source sanity gates; (a5) all-21 linear with 4-source pool; (M3) majority = ≥3 of 4 sources agree with |AUROC−0.5| ≥ 0.03; (M2) ≥2 of 4 agree, 2-2 ties broken by pooled-train direction (kept only if pooled |AUROC−0.5| ≥ 0.03). LR config unchanged (LR=0.1, EPOCHS=3000, LAMBDA=0.01).
+
+| Held-out source | (s21) 3-src all-21 | (sB) 3-src majority | (a5) 4-src all-21 | (M3) 4-src maj≥3 | (M2) 2-of-4+ties |
+|---|---:|---:|---:|---:|---:|
+| andythetechnerd03 | 0.6826 | 0.7143 | 0.6323 | 0.5943 (D=7) | 0.6491 (D=20) |
+| RAID | 0.8008 | 0.8266 | 0.6406 | 0.6245 (D=6) | 0.7363 (D=16) |
+| MAGE | 0.4625 | 0.5704 | 0.8628 | 0.9010 (D=10) | 0.8625 (D=17) |
+| HC3 | 0.2793 | 0.3825 | 0.3565 | 0.3594 (D=7) | 0.4249 (D=17) |
+| **MEAN** | **0.5563** | **0.6235** | **0.6231** | **0.6198** | **0.6682** |
+
+Verdict: **KEEP — new best 0.6682** via (M2), the 2-of-4-with-tie-break variant (0.6682 > 0.6235 gate). Both sanity gates reproduced exactly (0.5563 / 0.6235). The originally hypothesized rule (M3, strict >half of 4 = ≥3 votes) FAILS the gate at 0.6198 — with dmitva's strong-but-often-inverted directions it shrinks selection to 6–10 features and drops andy/RAID hard.
+
+HC3 movement: 0.3825 → 0.4249 (+0.042 under M2; still inverted but best HC3 ever recorded). MAGE is the big winner: 0.5704 → 0.9010 (M3) / 0.8625 (M2) — dmitva (student-essay domain, ChatGPT-style AI) is apparently distributionally close to MAGE and anchors its fold. Costs: RAID 0.8266 → 0.7363, andy 0.7143 → 0.6491 under M2 (the per-fold hypothesis "improves all 4 folds" is REFUTED — 2 folds up, 2 down; the mean gate passes on MAGE's +0.29).
+
+Anomalies: (1) dmitva single-feature directions are strong but frequently inverted vs the other sources — lexical 0.022, rareWords 0.034, fleschKincaid 0.165, ngramRep 0.153 vs formality 0.933, burstiness 0.910 — so it adds discriminative rows to the pool but *disagrees* in direction votes, which is why loosening to 2-of-4 (D=16–20, nearly all-21) beats tightening to 3-of-4. The win comes mostly from the enlarged training pool, not sharper voting: (a5) all-21 with the pool already jumps MAGE 0.46 → 0.86. (2) M2 selects near-everything, so iteration 3's selection machinery contributes little on top of the pool at 4 sources. (3) Fragility caveat: the mean now leans on one fold (MAGE 0.90); a different 5th source could swing it.
+
+## Iteration 6 (retry) — VALIDATION: fresh source artem9k/ai-text-detection-pile
+
+**Note:** the first iteration-6 attempt hung for 29+ minutes with zero output (almost certainly a chained dataset-candidate probe with no HTTP timeout blocking on a slow/stuck first candidate) and was abandoned without producing results. This retry used exactly one pre-picked dataset, one splits-probe, one rows-probe, and a hard 15s timeout + no-silent-retry policy on every request; total wall-clock for the whole iteration (probe + fetch + extract + eval) was well under 6 minutes (fetch itself took ~3.4s once the correct offsets were found).
+
+**Dataset:** `artem9k/ai-text-detection-pile` (config `default`, split `train`, 1,392,522 rows total; columns `source, id, text`). Splits-probe and rows-probe both succeeded on the first try (15s timeout, no retries needed). Sample-row sanity check: the first 5 rows (offset 0) were all `source=human` — genuine, punctuation/case-intact essay text (e.g. "12 Years a Slave: An Analysis of the Film Essay... The 2013 film 12 Years a Slave proved that slavery is a worldwide issue..."). A follow-up single-row sample at offset 1,300,000 confirmed `source=ai` rows exist there (the dataset is stored in large contiguous same-source blocks, not shuffled — offsets 0/700k/1,000,000 were all human, 1,300,000 was all AI). Mapping used: `source==='human' -> 0`, else `-> 1`. Fetched 200 human (offset 0-200) + 200 AI (offset 1,300,000-1,300,200) rows, min 20 words, 0 skipped -> `source6.csv` / `features_src6.csv` (400 rows, 21 features, extracted via the exact extract_ext5.js approach). This source was used ONLY as a held-out validation set — never added to the training pool.
+
+Config (script: validate_src6.js): trained ONCE on all 5 existing sources pooled (features_ext5.csv: andythetechnerd03, RAID, MAGE, HC3, dmitva) using the iteration-5 M2 rule generalized to 5 sources (keep a feature if >=2 sources vote the same direction with |AUROC-0.5|>=0.03; an exact 2-2 split is tie-broken by pooled-train direction). LR config unchanged (LR=0.1, EPOCHS=3000, LAMBDA=0.01).
+
+| Metric | Result |
+|---|---|
+| V1 — M2-selected (D=16), scored on source6 | **0.4508** |
+| V2 — all-21, no selection, scored on source6 | **0.5317** |
+| V3 — sanity: iteration-5 M2 LOSO on features_ext5.csv, mean | **0.6682** (exact match to iteration 5) |
+
+V3 reproduced the iteration-5 mean exactly (0.6682, per-fold: andy 0.6491, RAID 0.7363, MAGE 0.8625, HC3 0.4249), confirming the validation script's training/scoring machinery is implemented correctly and the discrepancy below is not a bug.
+
+**Interpretation branch fired: V1 <= 0.52 -> recent rule-tuning is meta-overfit.** V1 (0.4508) is not just weak, it is *below chance* on a genuinely fresh, never-seen-in-training source — recommend rollback to iteration-3's 3-source majority config (0.6235) as the trusted baseline. V2 (0.5317) >= V1 (0.4508): the M2 feature-selection machinery actively *hurts* out-of-domain generalization here (selection makes it worse than no selection at all), consistent with iteration 5's own observation that M2 selects near-everything and mostly just reflects the training pool rather than sharpening transferable signal. Conclusion: the strong 0.6682 LOSO mean from iterations 3-5 was built and tuned against the same fixed 4-held-out-source universe (andythetechnerd03/RAID/MAGE/HC3) repeatedly, and does not transfer to an actually independent 5th source (artem9k) — it is very likely meta-overfitting to that fixed validation loop rather than a real detector improvement. Recommend rolling back to the iteration-3 baseline (3-source majority rule, 0.6235) as the trusted number going forward, and treating any future single-fixed-LOSO-loop tuning with skepticism unless it also holds up on a fresh external source like this one.
+
+## iter 7 (final) — pre-registered config selection on external source6
+
+Setup (script: final_config.js; math reused verbatim from validate_src6.js — LR=0.1, EPOCHS=3000, LAMBDA=0.01, standardize-on-train, rank-sum AUROC, margin 0.03): every config is trained on the 5 pooled features_ext5.csv sources and scored on features_src6.csv (artem9k, 400 rows, never used in training or rule-tuning). Decision metric = source6 AUROC (pre-registered: winner = highest; if best <= 0.55, no stylometric config generalizes). Reference metric = 5-source LOSO mean on features_ext5.csv (each source held out in turn, selection re-run per fold — note this now includes a dmitva fold, so it is not directly comparable to the 4-fold means of iterations 3-6). C2 adapts the iteration-3 majority rule per the loop's own convention (iter-5 M3): strict majority = >=3 of 5 pooled sources (>=3 of 4 in LOSO folds) agreeing in direction with |AUROC-0.5| >= 0.03.
+
+| Config | Description | source6 AUROC (decision) | LOSO-5 mean (ref) | D (pooled) |
+|---|---|---:|---:|---:|
+| C1 | all-21, no selection | 0.5317 | 0.5921 | 21 |
+| **C2** | **iter-3 direction-consistency majority (>=3 of 5)** | **0.5334** | **0.6178** | **14** |
+| C3 | iter-5 M2 (>=2 votes + tie-break) | 0.4508 | 0.6513 | 16 |
+| C4 | all-21 minus degenerate (std<1e-9 on pooled train) | 0.5317 | 0.5921 | 21 |
+
+Sanity gates all reproduced exactly: C1 source6 = 0.5317 (iter-6 V2), C3 source6 = 0.4508 (iter-6 V1), and C3's four original LOSO folds match iteration 5 to 4 decimals (andy 0.6491, RAID 0.7363, MAGE 0.8625, HC3 0.4249). C4 is bit-identical to C1 — no feature is constant across the pooled 5-source training set (the per-source frozen features all vary in at least one other source), so the degeneracy filter drops nothing.
+
+**Winner: C2 at 0.5334** — but it clears C1 by only +0.0017, and the ordering of LOSO means (C3 0.6513 > C2 0.6178 > C1 0.5921) is nearly the *reverse* of the external ordering (C2 > C1 > C3), confirming once more that in-loop LOSO gains were meta-overfitting: the config that looked best internally (M2) is the worst externally, below chance.
+
+**FINAL LOOP VERDICT (pre-registered branch fired: best source6 AUROC 0.5334 <= 0.55): NO stylometric config generalizes — stylometry ceiling confirmed on external data; LM backend (Fast-DetectGPT) is the path forward.** The 21-feature stylometric stack, under every selection scheme tried across 7 iterations, sits at or barely above chance (0.45-0.53 AUROC) on a genuinely unseen source. This matches the earlier LOSO-AUROC-0.52 stylometry-ceiling finding and closes the optimization loop: further rule-tuning on this feature set is not worth pursuing; effort should move to the perplexity-curvature LM backend (Fast-DetectGPT) planned for the FastAPI phase.

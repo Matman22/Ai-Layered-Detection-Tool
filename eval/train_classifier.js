@@ -20,18 +20,27 @@ const HAND_WEIGHTS = [
   0.05, 0.12, 0.04, 0.08, 0.04, 0.07, 0.03, 0.05,
 ];
 
-// ─── Load features.csv ───────────────────────────────────────────────────────
-const csv = fs.readFileSync(path.join(__dirname, 'features.csv'), 'utf8').replace(/^﻿/, '');
+// ─── Load features csv ───────────────────────────────────────────────────────
+// Input/output configurable: node train_classifier.js [features.csv] [model.json]
+const inFile = process.argv[2] || 'combined_features.csv';
+const outFile = process.argv[3] || 'model_multi.json';
+
+const csv = fs.readFileSync(path.join(__dirname, inFile), 'utf8').replace(/^﻿/, '');
 const lines = csv.split('\n').filter(l => l.trim());
 const header = lines[0].split(',');
 const FEATURE_NAMES = header.slice(0, 17);
 const li = header.indexOf('is_ai_generated');
 const l2i = header.indexOf('l2_score');
 const l5i = header.indexOf('l5_score');
+const si = header.indexOf('source'); // -1 for single-source legacy features.csv
 
 const data = lines.slice(1).map(line => {
-  const c = line.split(',').map(Number);
-  return { x: c.slice(0, 17), y: c[li], l2: c[l2i], l5: c[l5i] };
+  const c = line.split(',');
+  return {
+    x: c.slice(0, 17).map(Number),
+    y: Number(c[li]), l2: Number(c[l2i]), l5: Number(c[l5i]),
+    source: si !== -1 ? c[si] : 'all',
+  };
 });
 
 // ─── Deterministic stratified 70/30 split ────────────────────────────────────
@@ -200,18 +209,43 @@ console.log(`  baseline   ${avg(cvHand).toFixed(4)} ± ${sd(cvHand).toFixed(4)}`
 console.log(`  classifier ${avg(cvClf).toFixed(4)} ± ${sd(cvClf).toFixed(4)}`);
 console.log(`  mean delta ${(avg(cvClf) - avg(cvHand) >= 0 ? '+' : '')}${(avg(cvClf) - avg(cvHand)).toFixed(4)}`);
 
+// ─── Leave-one-source-out CV (the REAL cross-dataset generalization number) ──
+// Train on 3 sources, test on the held-out 4th. This is the honest answer to
+// "will this work on a dataset it has never seen?" — 5-fold above can't tell us
+// that because every fold contains rows from all sources.
+const sources = [...new Set(data.map(r => r.source))];
+if (sources.length > 1) {
+  console.log('\n--- LEAVE-ONE-SOURCE-OUT CV (F1, classifier vs baseline) ---');
+  const losoClf = [], losoHand = [];
+  for (const heldOut of sources) {
+    const trn = data.filter(r => r.source !== heldOut);
+    const tst = data.filter(r => r.source === heldOut);
+    const m = trainLogistic(trn);
+    const cl1 = r => predictP(m, r) * 100;
+    const cT = bestThreshold(trn, cl1);
+    const hT = bestThreshold(trn, r => handL1(r.x));
+    const mc = metrics(tst, r => verdict(cl1(r), r.l2, r.l5, cT));
+    const mh = metrics(tst, r => verdict(handL1(r.x), r.l2, r.l5, hT));
+    losoClf.push(mc.f1); losoHand.push(mh.f1);
+    console.log(`  held-out ${heldOut.padEnd(20)} clf F1 ${mc.f1.toFixed(4)} (rec ${pct(mc.rec)}, spec ${pct(mc.spec)})  vs hand ${mh.f1.toFixed(4)}`);
+  }
+  console.log(`  MEAN  classifier ${avg(losoClf).toFixed(4)} ± ${sd(losoClf).toFixed(4)}  |  baseline ${avg(losoHand).toFixed(4)} ± ${sd(losoHand).toFixed(4)}`);
+  console.log(`  → cross-dataset generalization gap vs in-distribution 5-fold: ${(avg(cvClf) - avg(losoClf)).toFixed(4)}`);
+}
+
 // ─── Export final model — trained on ALL data (CV already gave the estimate) ──
 const finalModel = trainLogistic(data);
 const model = {
-  note: 'Top-1 stylometric logistic-regression classifier. classifierL1 = sigmoid(w·((features-mean)/std))*100, replaces the hand-weighted Layer-1 composite. Trained on ALL of eval/features.csv (single-source: andythetechnerd03). CV F1 above is the honest generalization estimate.',
+  note: `Top-1 stylometric logistic-regression classifier. classifierL1 = sigmoid(w·((features-mean)/std))*100, replaces the hand-weighted Layer-1 composite. Trained on ALL of eval/${inFile} (sources: ${sources.join(', ')}). 5-fold = in-distribution; LOSO = honest cross-dataset generalization.`,
+  sources,
   feature_names: FEATURE_NAMES,
   mean: finalModel.mean,
   std: finalModel.std,
   weights: finalModel.w,
   bias: finalModel.b,
 };
-fs.writeFileSync(path.join(__dirname, 'model.json'), JSON.stringify(model, null, 2));
-console.log('\nWrote eval/model.json (trained on all 500 rows)');
+fs.writeFileSync(path.join(__dirname, outFile), JSON.stringify(model, null, 2));
+console.log(`\nWrote eval/${outFile} (trained on all ${data.length} rows)`);
 
 // Feature importance (|standardized coef|) for interpretability.
 console.log('\nTop signals by |coefficient| (final model):');
