@@ -129,3 +129,42 @@ Python/FastAPI/PyTorch.
 - Adversarial ML / red-teaming methodology
 - Digital forensics (Unicode, file metadata, binary parsing)
 - Iterative system design from first principles
+
+---
+
+## Future work — v2: engineering for the RAID leaderboard
+
+The current detector is optimized for **honest generalization** — working on
+text it has never seen. A planned v2 would optimize for a different objective:
+the **highest possible score on the [RAID benchmark](https://raid-bench.xyz)**,
+which grades accuracy at a strict 5% false-positive rate across 8 domains,
+11 generators, and ~11 adversarial attacks. These are different games — RAID
+provides a labeled *training* split covering the same distribution as its test
+set, so the winning strategy is on-distribution specialization, not generality.
+
+Planned approach, in order of expected impact:
+
+1. **Supervised transformer fine-tuned on RAID-train.** Fine-tune DeBERTa-v3 /
+   RoBERTa on RAID's own training data so the model learns the exact generator
+   and attack distribution it's graded on. This is the single biggest lever and
+   fits a free Colab T4 GPU. (The current zero-shot approach caps far lower.)
+2. **Input-normalization front-end.** Strip zero-width characters, map homoglyphs
+   back to Latin, and collapse trick whitespace *before* the model sees the text —
+   defeating several adversarial attack types cheaply. This repurposes the
+   existing Layer 2 forensic code from a weak standalone detector into an
+   adversarial defense, where it is genuinely valuable.
+3. **Adversarial data augmentation.** Apply the same attacks (paraphrase, synonym
+   swap, homoglyph) to training data to harden the model on those slices.
+4. **Ensemble with a strong zero-shot signal** (Binoculars, or Fast-DetectGPT
+   with larger open base models) to hedge against under-represented generators.
+5. **Per-slice threshold calibration** to hit the 5%-FPR operating point exactly.
+
+**Honest tradeoff:** a RAID-tuned model would score far higher on the leaderboard
+but generalize *worse* to non-RAID text — a better number, a more specialized
+detector. Carried in the repo (rather than done immediately) precisely because
+the current generalist result, and the discipline of not overfitting to one
+benchmark, is the more transferable engineering story.
+
+Carried over from v1: the LOSO evaluation harness, the forensic normalization
+code (repurposed as adversarial defense), and the measure-before-claiming
+discipline that keeps a leaderboard-tuned model honest.
