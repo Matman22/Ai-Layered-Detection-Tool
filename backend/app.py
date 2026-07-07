@@ -22,9 +22,12 @@ from pydantic import BaseModel
 
 from fast_detect import fast_detect_score, MODEL_NAME
 
-# Logistic squash of raw discrepancy -> 0..1. Tune after eval_via_api.js.
-CENTER = 1.0   # discrepancy value mapped to p=0.5
-SCALE = 1.5    # spread; larger = softer transition
+# Logistic squash of raw discrepancy -> 0..1, calibrated by a 1-D logistic
+# regression (label ~ discrepancy) over 320 balanced samples scored through this
+# service — see backend/calibrate.js. Pooled AUROC 0.850; 79.4% accuracy at
+# p>=0.5; human median d=0.76, AI median d=3.66.
+CENTER = 1.9673   # discrepancy mapped to p=0.5 (= -intercept/coef)
+SCALE = 1.1235    # spread (= 1/coef); larger = softer transition
 
 app = FastAPI(title="Fast-DetectGPT", version="0.1")
 app.add_middleware(
